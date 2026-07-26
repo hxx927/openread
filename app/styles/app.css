@@ -25,9 +25,13 @@ body,
 html.stealth-on,
 html.stealth-on body,
 html.stealth-on #app,
-html.stealth-on .window-frame,
-html.stealth-on .window-titlebar {
+html.stealth-on .window-frame {
   background: transparent !important;
+}
+
+/* 透明摸鱼:隐藏标题栏(应用图标/标题/窗口按钮),只留正文,不暴露 */
+html.stealth-on .window-titlebar {
+  display: none !important;
 }
 
 @keyframes shake {

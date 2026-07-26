@@ -129,6 +129,14 @@ export default function BrowserView() {
     return () => clearInterval(id)
   }, [autoScroll, activeId])
 
+  // 透明模式:Esc 退出(标题栏已隐藏,给个可靠的退出兜底)
+  useEffect(() => {
+    if (!transparent) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setTransparent(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [transparent, setTransparent])
+
   const el = () => webviewRegistry.get(activeId ?? undefined)
   const go = () => {
     const u = toUrl(address)
@@ -258,7 +266,7 @@ function StealthFloatBar({
   const { alwaysOnTop, contentProtection, setAlwaysOnTop, setContentProtection } = useNative()
 
   return (
-    <div className="absolute top-3 right-3 z-10 opacity-30 transition-opacity duration-300 hover:opacity-100">
+    <div className="absolute top-0 right-0 z-10 p-3 opacity-0 transition-opacity duration-300 hover:opacity-100">
       <div className="flex items-center gap-1 rounded-full bg-background px-2 py-1 text-muted-foreground shadow-lg ring-1 ring-border">
         <IconBtn title="后退" onClick={onBack}>
           <ArrowLeft className="size-4" />
