@@ -1,0 +1,66 @@
+import { useState } from 'react'
+import { BookOpen, Globe, Sparkles } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import ReaderView from '@/app/features/reader/ReaderView'
+import BrowserView from '@/app/features/browser/BrowserView'
+import AiView from '@/app/features/ai/AiView'
+import StealthBar from '@/app/features/native/StealthBar'
+
+type View = 'reader' | 'browser' | 'ai'
+
+const NAV: { key: View; label: string; icon: typeof BookOpen }[] = [
+  { key: 'reader', label: '书架', icon: BookOpen },
+  { key: 'browser', label: '浏览', icon: Globe },
+  { key: 'ai', label: 'AI', icon: Sparkles },
+]
+
+export default function Shell() {
+  const [view, setView] = useState<View>('reader')
+
+  return (
+    <div className="flex h-full w-full flex-col">
+      <div className="flex min-h-0 flex-1">
+        {/* 左侧导航(墨鱼风格竖排) */}
+        <nav className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-3">
+          {NAV.map((n) => (
+            <button
+              key={n.key}
+              onClick={() => setView(n.key)}
+              title={n.label}
+              className={cn(
+                'flex w-11 flex-col items-center gap-1 rounded-lg py-2 text-[10px] transition-colors',
+                view === n.key
+                  ? 'bg-muted text-foreground'
+                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+              )}
+            >
+              <n.icon className="size-5" />
+              {n.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* 主视图:三个视图都常驻挂载(用 hidden 切换),保持各自状态(浏览标签、AI 登录、阅读进度) */}
+        <main className="relative min-w-0 flex-1">
+          <Pane show={view === 'reader'}>
+            <ReaderView />
+          </Pane>
+          <Pane show={view === 'browser'}>
+            <BrowserView />
+          </Pane>
+          <Pane show={view === 'ai'}>
+            <AiView />
+          </Pane>
+        </main>
+      </div>
+
+      {/* 底部摸鱼工具条 */}
+      <StealthBar />
+    </div>
+  )
+}
+
+/** 常驻挂载、仅切换显隐,避免切页时 webview / 阅读器被销毁重建 */
+function Pane({ show, children }: { show: boolean; children: React.ReactNode }) {
+  return <div className={cn('absolute inset-0', show ? 'block' : 'hidden')}>{children}</div>
+}

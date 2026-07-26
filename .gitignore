@@ -1,0 +1,14 @@
+node_modules
+dist
+out
+.DS_Store
+*.log*
+temp
+
+# 本项目运行时数据(开发期写到项目同盘,避免占用 C 盘)
+.openread-userdata
+
+# 本地环境
+.env
+.env.*
+!.env.example
