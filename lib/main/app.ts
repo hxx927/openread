@@ -8,6 +8,7 @@ import { registerNativeHandlers, unregisterNativeShortcuts } from '@/lib/conveyo
 import { registerReaderHandlers } from '@/lib/conveyor/handlers/reader-handler'
 import { registerLockHandlers } from '@/lib/conveyor/handlers/lock-handler'
 import { loadBounds, trackBounds } from './window-state'
+import { createTray, destroyTray } from './tray'
 
 export function createAppWindow(): void {
   // Register custom protocol for resources
@@ -57,6 +58,9 @@ export function createAppWindow(): void {
   }
   trackBounds(mainWindow)
 
+  // 常驻系统托盘图标:窗口隐藏后从这里点回来
+  createTray(mainWindow)
+
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
   })
@@ -86,7 +90,8 @@ export function createAppWindow(): void {
   }
 }
 
-// 退出前清理老板键等全局快捷键
+// 退出前清理老板键等全局快捷键 + 托盘
 app.on('will-quit', () => {
   unregisterNativeShortcuts()
+  destroyTray()
 })

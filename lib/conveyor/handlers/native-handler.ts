@@ -74,45 +74,35 @@ export const registerNativeHandlers = (window: BrowserWindow) => {
   /**
    * 自动隐藏(摸鱼)——轮询鼠标位置:
    *  - 指针在窗口内:显示
-   *  - 指针移出窗口:隐藏(peek);移回原区域再次显示
-   *  - 用户点击了别的窗口(窗口失焦):锁定隐藏(最小化),不再随鼠标浮现;点任务栏图标恢复
+   *  - 指针连续移出窗口约 600ms:隐藏;移回原区域立即再现
+   *  开启时同时 skipTaskbar,避免任务栏按钮反复闪烁;窗口藏了从"托盘图标"点回来。
    */
-  const auto = { enabled: false, dismissed: false, peekHiding: false, lastBounds: null as Rectangle | null }
+  const auto = { enabled: false, outside: 0, lastBounds: null as Rectangle | null }
   let timer: NodeJS.Timeout | null = null
+  const HIDE_AFTER = 3 // 连续 3 拍(~600ms)在外才隐藏,消除边缘抖动
 
   const tick = () => {
-    if (window.isDestroyed() || !auto.enabled || auto.dismissed || window.isMinimized()) return
+    if (window.isDestroyed() || !auto.enabled || window.isMinimized()) return
     if (window.isVisible()) auto.lastBounds = window.getBounds()
     const lb = auto.lastBounds
     if (!lb) return
     const inside = inRect(screen.getCursorScreenPoint(), lb)
-    if (inside && !window.isVisible()) {
-      window.show()
-    } else if (!inside && window.isVisible()) {
-      auto.peekHiding = true
-      window.hide()
-      setTimeout(() => (auto.peekHiding = false), 300)
+    if (inside) {
+      auto.outside = 0
+      if (!window.isVisible()) window.show()
+    } else {
+      auto.outside++
+      if (window.isVisible() && auto.outside >= HIDE_AFTER) window.hide()
     }
   }
 
-  window.on('blur', () => {
-    // 我们自己 peek 隐藏引起的 blur 忽略;真正切到别的窗口才锁定隐藏
-    if (!auto.enabled || auto.peekHiding) return
-    auto.dismissed = true
-    if (!window.isMinimized() && window.isVisible()) window.minimize()
-  })
-  const undismiss = () => {
-    if (auto.enabled) auto.dismissed = false
-  }
-  window.on('restore', undismiss)
-  window.on('focus', undismiss)
-
   handle('native-set-auto-hide-on-blur', (enabled: boolean) => {
     auto.enabled = enabled
-    auto.dismissed = false
+    auto.outside = 0
+    window.setSkipTaskbar(enabled)
     if (enabled) {
       auto.lastBounds = window.getBounds()
-      if (!timer) timer = setInterval(tick, 150)
+      if (!timer) timer = setInterval(tick, 200)
     } else {
       if (timer) {
         clearInterval(timer)
