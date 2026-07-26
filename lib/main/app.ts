@@ -22,8 +22,8 @@ export function createAppWindow(): void {
     height: saved?.height ?? 780,
     x: saved?.x,
     y: saved?.y,
-    minWidth: 800,
-    minHeight: 560,
+    minWidth: 360,
+    minHeight: 400,
     show: false,
     // 透明窗口:透明摸鱼模式下抠掉页面背景,正文清爽地浮在桌面上。
     // 关键:全程不调用 setOpacity(透明窗口 + setOpacity 在部分显卡上会崩)。

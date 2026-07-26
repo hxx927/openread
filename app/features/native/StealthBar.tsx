@@ -34,8 +34,11 @@ export default function StealthBar() {
         <Switch size="sm" checked={bossKeyEnabled} onCheckedChange={setBossKeyEnabled} />
       </label>
 
-      <label className="flex items-center gap-1.5" title="点到别的窗口即最小化;点任务栏图标恢复">
-        <LogIn className="size-3.5" /> 失焦隐藏
+      <label
+        className="flex items-center gap-1.5"
+        title="鼠标移出窗口即隐藏,移回原位再出现;点别的窗口则锁定隐藏(点任务栏图标恢复)"
+      >
+        <LogIn className="size-3.5" /> 自动隐藏
         <Switch size="sm" checked={autoHideOnBlur} onCheckedChange={setAutoHideOnBlur} />
       </label>
 
