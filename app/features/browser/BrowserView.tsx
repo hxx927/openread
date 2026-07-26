@@ -23,8 +23,15 @@ import type { WebviewElement } from '@/app/types/webview'
 
 const PARTITION = 'persist:openread-web' // 持久分区:各站登录状态得以保留
 
-/** 单个标签页:持有一个 <webview>,并把它的状态回写到 store。切换透明模式不重建它。 */
-function BrowserTab({ tab }: { tab: Tab }) {
+/** 透明摸鱼:抠掉页面背景,让正文清爽地浮在桌面上(仿墨鱼 browser-transparency.js) */
+const TRANSPARENCY_CSS = `
+  html, body { background: transparent !important; background-image: none !important; }
+  body * { background-color: transparent !important; background-image: none !important; box-shadow: none !important; }
+  ::-webkit-scrollbar { width: 0 !important; height: 0 !important; }
+`
+
+/** 单个标签页:持有一个 <webview>,状态回写 store。切换透明模式不重建它。 */
+function BrowserTab({ tab, transparent }: { tab: Tab; transparent: boolean }) {
   const ref = useRef<WebviewElement | null>(null)
   const initialUrl = useRef(tab.url)
   const patchTab = useBrowserStore((s) => s.patchTab)
@@ -61,6 +68,33 @@ function BrowserTab({ tab }: { tab: Tab }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab.id])
 
+  // 透明模式:注入/移除透明 CSS,导航后重注入
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    let key: string | null = null
+    let cancelled = false
+    const inject = async () => {
+      try {
+        key = await el.insertCSS(TRANSPARENCY_CSS)
+      } catch {
+        /* 页面尚未就绪 */
+      }
+    }
+    const onLoad = () => {
+      if (!cancelled && transparent) inject()
+    }
+    if (transparent) {
+      inject()
+      el.addEventListener('did-finish-load', onLoad)
+    }
+    return () => {
+      cancelled = true
+      el.removeEventListener('did-finish-load', onLoad)
+      if (key) el.removeInsertedCSS(key).catch(() => {})
+    }
+  }, [transparent])
+
   return (
     <webview
       ref={ref as unknown as React.Ref<HTMLElement>}
@@ -68,6 +102,7 @@ function BrowserTab({ tab }: { tab: Tab }) {
       partition={PARTITION}
       allowpopups={'true'}
       className="h-full w-full"
+      style={{ background: 'transparent' }}
     />
   )
 }
@@ -102,7 +137,7 @@ export default function BrowserView() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-background text-foreground">
+    <div className={cn('flex h-full flex-col text-foreground', transparent ? 'bg-transparent' : 'bg-background')}>
       {/* 顶部 chrome:透明摸鱼模式下隐藏 */}
       {!transparent && (
         <>
@@ -168,7 +203,7 @@ export default function BrowserView() {
               onClick={toggleTransparent}
               disabled={activeIsHome}
               className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-30"
-              title="透明摸鱼模式:窗口半透,浮在桌面上"
+              title="透明摸鱼模式:抠掉网页背景,正文浮在桌面上"
             >
               <Ghost className="size-4" />
               透明
@@ -178,12 +213,12 @@ export default function BrowserView() {
       )}
 
       {/* 内容区:位置固定,切换透明不重建 webview */}
-      <div className={cn('relative flex-1', activeIsHome ? 'bg-background' : 'bg-white')}>
+      <div className={cn('relative flex-1', activeIsHome ? 'bg-background' : transparent ? 'bg-transparent' : 'bg-white')}>
         {tabs
           .filter((t) => t.url)
           .map((t) => (
             <div key={t.id} className={cn('absolute inset-0', t.id === activeId ? 'block' : 'hidden')}>
-              <BrowserTab tab={t} />
+              <BrowserTab tab={t} transparent={transparent} />
             </div>
           ))}
         {activeIsHome && (
@@ -206,7 +241,7 @@ export default function BrowserView() {
   )
 }
 
-/** 透明模式右上角悬浮条:平时半透,鼠标移上去才清晰 */
+/** 透明模式右上角悬浮条:平时半透,鼠标移上去才清晰。不含 setOpacity(透明窗口下会崩)。 */
 function StealthFloatBar({
   autoScroll,
   onToggleScroll,
@@ -220,7 +255,7 @@ function StealthFloatBar({
   onBack: () => void
   onReload: () => void
 }) {
-  const { opacity, alwaysOnTop, contentProtection, setOpacity, setAlwaysOnTop, setContentProtection } = useNative()
+  const { alwaysOnTop, contentProtection, setAlwaysOnTop, setContentProtection } = useNative()
 
   return (
     <div className="absolute top-3 right-3 z-10 opacity-30 transition-opacity duration-300 hover:opacity-100">
@@ -234,17 +269,6 @@ function StealthFloatBar({
         <IconBtn title={autoScroll ? '停止自动滚动' : '自动滚动'} active={autoScroll} onClick={onToggleScroll}>
           {autoScroll ? <Pause className="size-4" /> : <Play className="size-4" />}
         </IconBtn>
-        <span className="mx-0.5 h-4 w-px bg-border" />
-        <input
-          type="range"
-          min={0.2}
-          max={1}
-          step={0.05}
-          value={opacity}
-          onChange={(e) => setOpacity(Number(e.target.value))}
-          className="h-1 w-16 cursor-pointer accent-primary"
-          title="窗口透明度"
-        />
         <IconBtn title="窗口置顶" active={alwaysOnTop} onClick={() => setAlwaysOnTop(!alwaysOnTop)}>
           <Pin className="size-4" />
         </IconBtn>

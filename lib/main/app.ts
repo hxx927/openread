@@ -25,8 +25,10 @@ export function createAppWindow(): void {
     minWidth: 800,
     minHeight: 560,
     show: false,
-    // 不透明窗口(稳定);透明摸鱼改用 setOpacity 整窗半透,避免透明窗口在部分显卡上崩溃
-    backgroundColor: '#1c1c1c',
+    // 透明窗口:透明摸鱼模式下抠掉页面背景,正文清爽地浮在桌面上。
+    // 关键:全程不调用 setOpacity(透明窗口 + setOpacity 在部分显卡上会崩)。
+    transparent: true,
+    backgroundColor: '#00000000',
     icon: appIcon,
     frame: false,
     titleBarStyle: 'hiddenInset',

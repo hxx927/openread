@@ -7,12 +7,18 @@ import './styles/app.css'
 
 export default function App() {
   const { locked, init } = useLockStore()
+  const transparent = useStealthStore((s) => s.transparent)
   const initStealth = useStealthStore((s) => s.init)
 
   useEffect(() => {
     init()
     initStealth()
   }, [init, initStealth])
+
+  // 透明摸鱼:给 <html> 挂 class,让应用底层透明,露出桌面
+  useEffect(() => {
+    document.documentElement.classList.toggle('stealth-on', transparent)
+  }, [transparent])
 
   return (
     <>

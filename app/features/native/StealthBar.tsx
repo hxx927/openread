@@ -5,7 +5,7 @@ import { useStealthStore } from '@/app/store/stealthStore'
 
 /** 摸鱼工具条:透明度 / 置顶 / 防截图 / 老板键 / 失焦隐藏 / 立即隐藏。全是 Electron 原生能力。 */
 export default function StealthBar() {
-  const { opacity, alwaysOnTop, contentProtection, setOpacity, setAlwaysOnTop, setContentProtection } = useNative()
+  const { alwaysOnTop, contentProtection, setAlwaysOnTop, setContentProtection } = useNative()
   const { bossKeyEnabled, autoHideOnBlur, setBossKeyEnabled, setAutoHideOnBlur } = useStealthStore()
 
   const minimize = () => window.conveyor.window.windowMinimize()
@@ -17,19 +17,7 @@ export default function StealthBar() {
         摸鱼
       </div>
 
-      <label className="flex items-center gap-2">
-        透明度
-        <input
-          type="range"
-          min={0.2}
-          max={1}
-          step={0.05}
-          value={opacity}
-          onChange={(e) => setOpacity(Number(e.target.value))}
-          className="h-1 w-24 cursor-pointer accent-primary"
-        />
-        <span className="w-8 tabular-nums">{Math.round(opacity * 100)}%</span>
-      </label>
+      <span className="text-[11px] opacity-70">(透明摸鱼在「浏览」里点「透明」)</span>
 
       <label className="flex items-center gap-1.5">
         <Pin className="size-3.5" /> 置顶
