@@ -17,6 +17,8 @@ export interface ViewerProps {
   fontSize: number
   lineHeight: number
   theme: 'light' | 'sepia' | 'dark'
+  fontFamily: string
+  flow: 'paginated' | 'scrolled'
   onProgress: (fraction: number, location: string) => void
   onToc?: (toc: TocItem[]) => void
   onMeta?: (meta: { title?: string; author?: string; cover?: string }) => void

@@ -14,7 +14,15 @@ import {
   Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useReaderStore, FONT_FORMATS, type Theme, type SortKey } from '@/app/store/readerStore'
+import {
+  useReaderStore,
+  FONT_FORMATS,
+  FONT_OPTIONS,
+  type Theme,
+  type SortKey,
+  type Flow,
+  type ReaderSettings,
+} from '@/app/store/readerStore'
 import type { Book } from '@/lib/conveyor/api/reader-api'
 import FoliateViewer from './FoliateViewer'
 import PdfViewer from './PdfViewer'
@@ -202,6 +210,8 @@ function Reading({ book }: { book: Book }) {
     fontSize: settings.fontSize,
     lineHeight: settings.lineHeight,
     theme: settings.theme,
+    fontFamily: settings.fontFamily,
+    flow: settings.flow,
     onProgress: (f: number, loc: string) => {
       setProgress(f)
       saveProgress(f, loc)
@@ -323,8 +333,8 @@ function SettingsPanel({
   set,
   onClose,
 }: {
-  settings: { fontSize: number; lineHeight: number; theme: Theme }
-  set: (p: Partial<{ fontSize: number; lineHeight: number; theme: Theme }>) => void
+  settings: ReaderSettings
+  set: (p: Partial<ReaderSettings>) => void
   onClose: () => void
 }) {
   const themes: { key: Theme; label: string; bg: string; fg: string }[] = [
@@ -332,10 +342,14 @@ function SettingsPanel({
     { key: 'sepia', label: '护眼', bg: '#f5ecd9', fg: '#5b4636' },
     { key: 'dark', label: '暗黑', bg: '#191919', fg: '#c9c9c9' },
   ]
+  const flows: { key: Flow; label: string }[] = [
+    { key: 'paginated', label: '翻页' },
+    { key: 'scrolled', label: '滚动' },
+  ]
   return (
     <>
       <div className="fixed inset-0 z-20" onClick={onClose} />
-      <div className="absolute top-9 right-0 z-30 w-60 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl">
+      <div className="absolute top-9 right-0 z-30 w-64 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl">
         <Row label="字号">
           <Stepper
             value={`${settings.fontSize}`}
@@ -350,6 +364,23 @@ function SettingsPanel({
             onPlus={() => set({ lineHeight: Math.min(2.4, +(settings.lineHeight + 0.1).toFixed(1)) })}
           />
         </Row>
+
+        <Segment label="字体">
+          {FONT_OPTIONS.map((f) => (
+            <SegBtn key={f.key} active={settings.fontFamily === f.css} onClick={() => set({ fontFamily: f.css })}>
+              {f.label}
+            </SegBtn>
+          ))}
+        </Segment>
+
+        <Segment label="排版">
+          {flows.map((f) => (
+            <SegBtn key={f.key} active={settings.flow === f.key} onClick={() => set({ flow: f.key })}>
+              {f.label}
+            </SegBtn>
+          ))}
+        </Segment>
+
         <div className="mt-2">
           <p className="mb-1.5 text-xs text-muted-foreground">主题</p>
           <div className="flex gap-2">
@@ -370,6 +401,29 @@ function SettingsPanel({
         </div>
       </div>
     </>
+  )
+}
+
+function Segment({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-2">
+      <p className="mb-1.5 text-xs text-muted-foreground">{label}</p>
+      <div className="flex gap-1.5">{children}</div>
+    </div>
+  )
+}
+
+function SegBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'flex-1 rounded-md border py-1.5 text-[11px]',
+        active ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-muted'
+      )}
+    >
+      {children}
+    </button>
   )
 }
 

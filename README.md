@@ -2,31 +2,37 @@
 
 > 一个 **网页浏览 + 本地电子书阅读** 二合一的桌面工具。灵感来自「墨鱼阅读」,但**完全用开源组件从零实现**,不含任何闭源代码,MIT 开源。
 
-<p align="center"><i>EPUB / MOBI / AZW3 / FB2 / CBZ / PDF / TXT 阅读器 · 多标签内嵌浏览器 · AI 网站聚合 · 透明摸鱼 / 老板键 / 防截图</i></p>
+<p align="center"><i>多格式电子书阅读器 · 站点导航浏览器 · AI 网站聚合 · 透明摸鱼 / 自动隐藏 / 托盘 / 老板键 / 防截图 / 密码锁</i></p>
 
 ---
 
 ## ✨ 功能
 
-- 📚 **本地阅读器**
-  - EPUB / MOBI / AZW3 / FB2 / CBZ —— 基于 [foliate-js](https://github.com/johnfactotum/foliate-js)
-  - PDF —— 基于 [pdf.js](https://github.com/mozilla/pdf.js)
-  - TXT —— 自动识别 UTF-8 / GB18030(中文)
-  - 书架、阅读进度记忆、目录跳转、字号 / 行距 / 主题(明亮 / 护眼 / 暗黑)
-- 🌐 **内嵌多标签浏览器**(Electron `<webview>`)
-  - 标签、地址栏、前进 / 后退 / 刷新、快捷站点;登录状态持久保留
-- 🤖 **AI 面板**:内嵌豆包 / DeepSeek / Kimi / 元宝 / 智谱官方网站(登录即用,本应用不代理、不经手任何 API Key)
-- 🫥 **摸鱼 / 隐蔽**(纯 Electron 原生能力)
-  - 窗口透明度、窗口置顶、**防截图录屏**(`setContentProtection`)、**老板键** `Ctrl+Shift+X` 一键显隐
+### 📚 本地阅读器
+- **格式**:EPUB / MOBI / AZW3 / FB2 / CBZ(foliate-js)、PDF(pdf.js)、TXT(自动识别 UTF-8 / GB18030)
+- 书架(导入时自动提取**封面**、标题、作者)、**拖拽导入**、搜索、排序(最近阅读 / 标题 / 导入时间)
+- 阅读进度记忆、目录跳转、**可拖动进度条**、字号 / 行距 / 主题(明亮 / 护眼 / 暗黑)
 
-## 🖼️ 界面
+### 🌐 内嵌浏览器(导航启动页)
+- 打开即**站点导航页**:搜索框 + 分类推荐(小说 / 视频 / 备考 / 财经 / AI)+ **我的站点**(自己添加,点即进)
+- 多标签 `<webview>`、地址栏、前进 / 后退 / 刷新;各站登录状态持久保留
 
-左侧竖排导航:**书架 / 浏览 / AI**,底部常驻**摸鱼工具条**。无边框深色窗口。
+### 🤖 AI 面板
+- 内嵌豆包 / DeepSeek / Kimi / 元宝 / 智谱官方网站(登录即用,**不代理、不经手任何 API Key**)
+
+### 🫥 摸鱼 / 隐蔽(纯 Electron 原生能力)
+- **透明摸鱼**:抠掉网页背景,只剩正文浮在桌面上;隐藏全部界面 / 标题栏,不暴露(Esc 退出)
+- **自动隐藏**:鼠标移出窗口即隐、移回再现;点击别的窗口则锁定隐藏,只能从托盘 / 老板键唤回
+- **常驻系统托盘图标**(左键显隐、右键菜单)
+- **老板键** `Ctrl+Shift+X` 一键显隐(开关,默认关)、窗口置顶、**防截图录屏**、网页自动滚动
+- **密码锁**:4–8 位 PIN,scrypt + 系统级 safeStorage,完全本地离线
 
 ## 🚀 下载使用
 
-- **普通用户**:到 [Releases](../../releases) 下载 `openread-x.y.z-setup.exe`(安装版)或 `openread-x.y.z-portable.exe`(免安装便携版)。
-- 安装包由 GitHub Actions 自动构建(见 `.github/workflows/release.yml`):推送 `v*` 标签即出一份 Release。
+到 [Releases](../../releases) 下载最新版:
+- `openread-x.y.z-setup.exe`(安装版)或 `openread-x.y.z-portable.exe`(免安装便携版)
+
+> Windows 托盘图标默认被系统收进"隐藏图标"里,点任务栏时钟旁的 `^` 展开即可,可拖出常驻。
 
 ## 🛠️ 自己构建
 
@@ -36,13 +42,11 @@
 pnpm install
 pnpm dev            # 开发模式(热更新)
 pnpm build:win      # 打包 Windows(安装包 + 便携版,产物在 dist/)
-pnpm build:mac      # 打包 macOS
-pnpm build:linux    # 打包 Linux
 ```
 
-发布新版本:改 `package.json` 的 `version` → `git tag v0.1.0` → `git push --tags`,CI 自动出 Release。
+发布新版本:改 `package.json` 的 `version` → `git tag vX.Y.Z` → `git push origin vX.Y.Z`,GitHub Actions 自动出 Release。
 
-> 磁盘小可把缓存挪到别的盘:设环境变量 `ELECTRON_CACHE` / `ELECTRON_BUILDER_CACHE` / `NPM_CONFIG_CACHE`,并 `pnpm config set store-dir <path>`。开发期本应用的运行数据写在项目旁的 `.openread-userdata/`。
+> 磁盘小可把缓存挪到别的盘:设环境变量 `ELECTRON_CACHE` / `ELECTRON_BUILDER_CACHE` / `NPM_CONFIG_CACHE`,并 `pnpm config set store-dir <path>`。
 
 ## 🧱 技术栈 / 架构
 
@@ -52,19 +56,28 @@ pnpm build:linux    # 打包 Linux
 
 ```
 lib/
-  main/            主进程:窗口、协议、书库(JSON)
-  conveyor/        类型安全 IPC(schemas / handlers / api)
-    ├ native-*     摸鱼:透明 / 置顶 / 防截图 / 老板键
-    ├ reader-*     阅读:文件对话框 / 读取 / 书库
-    └ browser-*    浏览器:弹窗转标签
+  main/
+    app.ts              主窗口、协议、托盘、窗口记忆装配
+    tray.ts             常驻系统托盘图标
+    autohide.ts         自动隐藏(离屏 peek + 失焦锁定)
+    lock.ts             密码锁(scrypt + safeStorage)
+    library.ts          书库(JSON 存储)
+    window-state.ts     记忆窗口尺寸/位置
+  conveyor/             类型安全 IPC(schemas / handlers / api)
+    ├ window / app      窗口控制 / 系统
+    ├ native            摸鱼:透明·置顶·防截图·老板键·自动隐藏
+    ├ reader            阅读:文件对话框 / 读取 / 书库
+    ├ browser           浏览器:弹窗转标签
+    └ lock              密码锁
 app/
-  Shell.tsx        侧栏 + 三视图外壳
+  Shell.tsx             侧栏 + 三视图外壳
   features/
-    reader/        foliate / pdf / txt 三个 viewer + 书架 + 阅读设置
-    browser/       多标签 <webview> 浏览器
-    ai/            AI 网站聚合
-    native/        摸鱼工具条
-  store/           zustand:browserStore / readerStore
+    reader/             foliate / pdf / txt 三个 viewer + 书架 + 封面提取 + 阅读设置
+    browser/            导航启动页(NavHome)+ 多标签 <webview> + 透明摸鱼
+    ai/                 AI 网站聚合
+    native/             摸鱼工具条
+    lock/               锁屏 + 密码锁设置
+  store/                zustand:browserStore / readerStore / stealthStore / lockStore
 ```
 
 ## 📄 许可 & 声明

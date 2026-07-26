@@ -4,19 +4,32 @@ import { extractMeta } from '@/app/features/reader/cover'
 
 export type Theme = 'light' | 'sepia' | 'dark'
 export type SortKey = 'recent' | 'title' | 'added'
+export type Flow = 'paginated' | 'scrolled'
 
 export interface ReaderSettings {
   fontSize: number // px
   lineHeight: number
   theme: Theme
+  fontFamily: string // CSS font-family(空=默认)
+  flow: Flow // 翻页 / 滚动
 }
+
+/** 字体预设(值为 CSS font-family) */
+export const FONT_OPTIONS: { key: string; label: string; css: string }[] = [
+  { key: 'default', label: '默认', css: '' },
+  { key: 'serif', label: '宋体', css: '"Noto Serif SC","Songti SC",SimSun,serif' },
+  { key: 'sans', label: '黑体', css: '"Microsoft YaHei","PingFang SC","Source Han Sans SC",sans-serif' },
+  { key: 'kai', label: '楷体', css: '"Kaiti SC","KaiTi","STKaiti",serif' },
+]
+
+const DEFAULTS: ReaderSettings = { fontSize: 20, lineHeight: 1.6, theme: 'light', fontFamily: '', flow: 'paginated' }
 
 const SETTINGS_KEY = 'openread.reader.settings'
 const loadSettings = (): ReaderSettings => {
   try {
-    return { fontSize: 20, lineHeight: 1.6, theme: 'light', ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }
+    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }
   } catch {
-    return { fontSize: 20, lineHeight: 1.6, theme: 'light' }
+    return { ...DEFAULTS }
   }
 }
 

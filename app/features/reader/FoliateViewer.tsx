@@ -3,8 +3,14 @@ import { THEME_COLORS, type TocItem, type ViewerHandle, type ViewerProps } from 
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-function readerCSS({ fontSize, lineHeight, theme }: Pick<ViewerProps, 'fontSize' | 'lineHeight' | 'theme'>) {
+function readerCSS({
+  fontSize,
+  lineHeight,
+  theme,
+  fontFamily,
+}: Pick<ViewerProps, 'fontSize' | 'lineHeight' | 'theme' | 'fontFamily'>) {
   const { bg, fg } = THEME_COLORS[theme]
+  const family = fontFamily ? `html, body, p, li, blockquote, dd, div, span { font-family: ${fontFamily} !important; }` : ''
   return `
     @namespace epub "http://www.idpf.org/2007/ops";
     html { color-scheme: ${theme === 'dark' ? 'dark' : 'light'}; background: ${bg}; color: ${fg}; font-size: ${fontSize}px; }
@@ -12,6 +18,7 @@ function readerCSS({ fontSize, lineHeight, theme }: Pick<ViewerProps, 'fontSize'
     a:link, a:visited { color: ${theme === 'dark' ? '#6db3f2' : '#2563eb'}; }
     p, li, blockquote, dd, div { line-height: ${lineHeight}; text-align: justify; }
     pre { white-space: pre-wrap !important; }
+    ${family}
   `
 }
 
@@ -61,6 +68,7 @@ const FoliateViewer = forwardRef<ViewerHandle, ViewerProps>(function FoliateView
 
       await view.open(file)
       view.renderer?.setStyles?.(readerCSS(props))
+      view.renderer?.setAttribute?.('flow', props.flow) // 翻页 / 滚动
 
       // 恢复上次位置,失败则从头
       let restored = false
@@ -92,11 +100,12 @@ const FoliateViewer = forwardRef<ViewerHandle, ViewerProps>(function FoliateView
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path])
 
-  // 设置变化时重新套用样式
+  // 设置变化时重新套用样式 / 排版模式
   useEffect(() => {
     viewRef.current?.renderer?.setStyles?.(readerCSS(props))
+    viewRef.current?.renderer?.setAttribute?.('flow', props.flow)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.fontSize, props.lineHeight, props.theme])
+  }, [props.fontSize, props.lineHeight, props.theme, props.fontFamily, props.flow])
 
   return <div ref={containerRef} className="h-full w-full" />
 })
