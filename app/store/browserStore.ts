@@ -3,33 +3,23 @@ import type { WebviewElement } from '@/app/types/webview'
 
 export interface Tab {
   id: string
-  url: string // 当前实际地址
+  url: string // '' = 导航主页;非空 = 网页
   title: string
   loading: boolean
   canGoBack: boolean
   canGoForward: boolean
 }
 
-/** 常用快捷站点(可自行增删)—— 借鉴墨鱼的"AI 聚合",直接开各家官网,凭据留在各站 */
-export const QUICK_SITES = [
-  { name: '豆包', url: 'https://www.doubao.com' },
-  { name: 'DeepSeek', url: 'https://chat.deepseek.com' },
-  { name: 'Kimi', url: 'https://www.kimi.com' },
-  { name: '元宝', url: 'https://yuanbao.tencent.com' },
-  { name: '起点', url: 'https://www.qidian.com' },
-  { name: '知乎', url: 'https://www.zhihu.com' },
-  { name: 'B站', url: 'https://www.bilibili.com' },
-]
-
-export const HOME_URL = 'https://www.bing.com'
+export interface MySite {
+  id: string
+  name: string
+  url: string
+}
 
 let seq = 1
 const nextId = () => `tab-${seq++}`
 
-/**
- * webview DOM 元素注册表(非响应式)。
- * 每个 <webview> 挂载时把自己登记进来,工具栏用它对"当前标签"下命令。
- */
+/** webview DOM 元素注册表(非响应式) */
 const registry = new Map<string, WebviewElement>()
 export const webviewRegistry = {
   set: (id: string, el: WebviewElement | null) => {
@@ -39,24 +29,43 @@ export const webviewRegistry = {
   get: (id: string | undefined) => (id ? registry.get(id) : undefined),
 }
 
+const MYSITES_KEY = 'openread.mysites'
+const loadMySites = (): MySite[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(MYSITES_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+const saveMySites = (s: MySite[]) => localStorage.setItem(MYSITES_KEY, JSON.stringify(s))
+
 interface BrowserState {
   tabs: Tab[]
   activeId: string | null
+  mySites: MySite[]
   newTab: (url?: string) => string
   closeTab: (id: string) => void
   setActive: (id: string) => void
   patchTab: (id: string, patch: Partial<Tab>) => void
-  navigate: (url: string) => void // 在当前标签打开地址(地址栏用)
+  navigate: (url: string) => void // 在当前标签打开地址
+  goHome: () => void // 当前标签回到导航页
+  addSite: (name: string, url: string) => void
+  removeSite: (id: string) => void
 }
 
 export const useBrowserStore = create<BrowserState>((set, get) => ({
-  tabs: [{ id: 'tab-0', url: HOME_URL, title: '新标签页', loading: true, canGoBack: false, canGoForward: false }],
+  tabs: [{ id: 'tab-0', url: '', title: '导航', loading: false, canGoBack: false, canGoForward: false }],
   activeId: 'tab-0',
+  mySites: loadMySites(),
 
-  newTab: (url = HOME_URL) => {
+  newTab: (url = '') => {
     const id = nextId()
     set((s) => ({
-      tabs: [...s.tabs, { id, url, title: '新标签页', loading: true, canGoBack: false, canGoForward: false }],
+      tabs: [
+        ...s.tabs,
+        { id, url, title: url ? '新标签页' : '导航', loading: !!url, canGoBack: false, canGoForward: false },
+      ],
       activeId: id,
     }))
     return id
@@ -68,12 +77,9 @@ export const useBrowserStore = create<BrowserState>((set, get) => ({
       const idx = s.tabs.findIndex((t) => t.id === id)
       const tabs = s.tabs.filter((t) => t.id !== id)
       let activeId = s.activeId
-      if (s.activeId === id) {
-        activeId = tabs.length ? tabs[Math.max(0, idx - 1)].id : null
-      }
+      if (s.activeId === id) activeId = tabs.length ? tabs[Math.max(0, idx - 1)].id : null
       return { tabs, activeId }
     })
-    // 关到最后一个也保留一个空标签,避免空白
     if (get().tabs.length === 0) get().newTab()
   },
 
@@ -83,20 +89,41 @@ export const useBrowserStore = create<BrowserState>((set, get) => ({
 
   navigate: (url) => {
     const { activeId } = get()
-    const el = webviewRegistry.get(activeId ?? undefined)
-    if (el && activeId) {
-      el.loadURL(url)
-      get().patchTab(activeId, { url, loading: true })
-    }
+    if (!activeId) return
+    const el = webviewRegistry.get(activeId)
+    get().patchTab(activeId, { url, loading: true })
+    // 已有 webview(网页→网页)直接导航;从导航页首次进入则由 React 挂载 webview 加载
+    if (el) el.loadURL(url)
+  },
+
+  goHome: () => {
+    const { activeId } = get()
+    if (!activeId) return
+    webviewRegistry.set(activeId, null)
+    get().patchTab(activeId, { url: '', title: '导航', loading: false, canGoBack: false, canGoForward: false })
+  },
+
+  addSite: (name, url) => {
+    const clean = url.trim()
+    const withProto = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`
+    const site: MySite = { id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, name: name.trim() || withProto, url: withProto }
+    const next = [...get().mySites, site]
+    set({ mySites: next })
+    saveMySites(next)
+  },
+
+  removeSite: (id) => {
+    const next = get().mySites.filter((s) => s.id !== id)
+    set({ mySites: next })
+    saveMySites(next)
   },
 }))
 
-/** 把用户在地址栏输入的内容规范成 URL:是网址就补协议,否则当作 Bing 搜索 */
+/** 把用户输入规范成 URL:是网址就补协议,否则当作 Bing 搜索 */
 export function toUrl(input: string): string {
   const s = input.trim()
-  if (!s) return HOME_URL
+  if (!s) return ''
   if (/^https?:\/\//i.test(s)) return s
-  // 形如 domain.tld 或 含点无空格 -> 当作网址
   if (/^[^\s]+\.[^\s]{2,}$/.test(s) && !s.includes(' ')) return `https://${s}`
   return `https://www.bing.com/search?q=${encodeURIComponent(s)}`
 }

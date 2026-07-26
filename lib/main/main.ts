@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { join } from 'path'
+import { appendFileSync } from 'fs'
 import { createAppWindow } from './app'
 
 // 开发期把用户数据(含 <webview> 浏览缓存)放到项目同盘(E:),避免占用 C 盘。
@@ -8,6 +9,19 @@ import { createAppWindow } from './app'
 if (!app.isPackaged) {
   app.setPath('userData', join(app.getAppPath(), '..', '.openread-userdata'))
 }
+
+// 主进程未捕获异常写入 userData/error.log,而不是弹致命框把应用冻住(便于排查)
+const logError = (tag: string, err: unknown) => {
+  try {
+    const line = `[${tag}] ${new Date().toISOString()} ${err instanceof Error ? err.stack : String(err)}\n`
+    appendFileSync(join(app.getPath('userData'), 'error.log'), line)
+  } catch {
+    /* ignore */
+  }
+  console.error(tag, err)
+}
+process.on('uncaughtException', (err) => logError('uncaughtException', err))
+process.on('unhandledRejection', (err) => logError('unhandledRejection', err))
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.

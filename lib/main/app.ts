@@ -49,7 +49,11 @@ export function createAppWindow(): void {
   registerReaderHandlers(mainWindow)
   registerLockHandlers(mainWindow)
 
-  if (saved?.maximized) mainWindow.maximize()
+  try {
+    if (saved?.maximized) mainWindow.maximize()
+  } catch {
+    /* 忽略:个别环境下透明窗口最大化可能异常 */
+  }
   trackBounds(mainWindow)
 
   mainWindow.on('ready-to-show', () => {

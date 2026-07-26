@@ -15,9 +15,10 @@ import {
   ShieldOff,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useBrowserStore, webviewRegistry, toUrl, QUICK_SITES, HOME_URL, type Tab } from '@/app/store/browserStore'
+import { useBrowserStore, webviewRegistry, toUrl, type Tab } from '@/app/store/browserStore'
 import { useStealthStore } from '@/app/store/stealthStore'
 import { useNative } from '@/app/features/native/useNative'
+import NavHome from './NavHome'
 import type { WebviewElement } from '@/app/types/webview'
 
 const PARTITION = 'persist:openread-web' // 持久分区:各站登录状态得以保留
@@ -67,7 +68,6 @@ function BrowserTab({ tab, transparent }: { tab: Tab; transparent: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab.id])
 
-  // 透明模式:注入/移除透明 CSS,导航后自动重注入
   useEffect(() => {
     const el = ref.current
     if (!el) return
@@ -107,9 +107,10 @@ function BrowserTab({ tab, transparent }: { tab: Tab; transparent: boolean }) {
 }
 
 export default function BrowserView() {
-  const { tabs, activeId, newTab, closeTab, setActive, navigate } = useBrowserStore()
+  const { tabs, activeId, newTab, closeTab, setActive, navigate, goHome } = useBrowserStore()
   const { transparent, autoScroll, toggleTransparent, setTransparent, toggleAutoScroll } = useStealthStore()
   const active = tabs.find((t) => t.id === activeId)
+  const activeIsHome = !active?.url
   const [address, setAddress] = useState(active?.url ?? '')
   const [editing, setEditing] = useState(false)
 
@@ -119,7 +120,6 @@ export default function BrowserView() {
 
   useEffect(() => window.conveyor.browser.onOpenTab((url) => newTab(url)), [newTab])
 
-  // 自动滚动(摸鱼看小说)
   useEffect(() => {
     if (!autoScroll) return
     const id = setInterval(() => {
@@ -130,22 +130,30 @@ export default function BrowserView() {
 
   const el = () => webviewRegistry.get(activeId ?? undefined)
   const go = () => {
-    navigate(toUrl(address))
+    const u = toUrl(address)
+    if (u) navigate(u)
     setEditing(false)
   }
 
-  // webview 栈(常驻,只显示当前标签)
+  // 只为「已打开网页」的标签渲染 webview;导航主页不占 webview
   const stack = (
     <>
-      {tabs.map((t) => (
-        <div key={t.id} className={cn('absolute inset-0', t.id === activeId ? 'block' : 'hidden')}>
-          <BrowserTab tab={t} transparent={transparent} />
+      {tabs
+        .filter((t) => t.url)
+        .map((t) => (
+          <div key={t.id} className={cn('absolute inset-0', t.id === activeId ? 'block' : 'hidden')}>
+            <BrowserTab tab={t} transparent={transparent} />
+          </div>
+        ))}
+      {activeIsHome && (
+        <div className="absolute inset-0">
+          <NavHome onOpen={navigate} />
         </div>
-      ))}
+      )}
     </>
   )
 
-  // 透明模式:只留正文 + 右上角悬浮条(平时很淡,鼠标移上去才清晰)
+  // 透明摸鱼模式:只留正文 + 右上角悬浮条
   if (transparent) {
     return (
       <div className="relative h-full w-full bg-transparent">
@@ -161,7 +169,6 @@ export default function BrowserView() {
     )
   }
 
-  // 普通模式:完整浏览器
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
       {/* 标签条 */}
@@ -203,10 +210,10 @@ export default function BrowserView() {
         <NavBtn title="前进" disabled={!active?.canGoForward} onClick={() => el()?.goForward()}>
           <ArrowRight className="size-4" />
         </NavBtn>
-        <NavBtn title="刷新" onClick={() => el()?.reload()}>
+        <NavBtn title="刷新" disabled={activeIsHome} onClick={() => el()?.reload()}>
           <RotateCw className={cn('size-4', active?.loading && 'animate-spin')} />
         </NavBtn>
-        <NavBtn title="主页" onClick={() => navigate(HOME_URL)}>
+        <NavBtn title="导航主页" onClick={goHome}>
           <House className="size-4" />
         </NavBtn>
         <div className="mx-1 flex flex-1 items-center gap-2 rounded-md bg-muted px-3 py-1.5">
@@ -224,7 +231,8 @@ export default function BrowserView() {
         </div>
         <button
           onClick={toggleTransparent}
-          className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+          disabled={activeIsHome}
+          className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-30"
           title="透明摸鱼模式:把网页正文变透明,浮在桌面上"
         >
           <Ghost className="size-4" />
@@ -232,26 +240,12 @@ export default function BrowserView() {
         </button>
       </div>
 
-      {/* 快捷站点 */}
-      <div className="flex items-center gap-1.5 overflow-x-auto border-b border-border px-3 py-1.5">
-        {QUICK_SITES.map((s) => (
-          <button
-            key={s.url}
-            onClick={() => navigate(s.url)}
-            className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] whitespace-nowrap text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-          >
-            {s.name}
-          </button>
-        ))}
-      </div>
-
-      {/* webview 栈 */}
-      <div className="relative flex-1 bg-white">{stack}</div>
+      {/* 内容区:导航主页 或 网页 */}
+      <div className={cn('relative flex-1', activeIsHome ? 'bg-background' : 'bg-white')}>{stack}</div>
     </div>
   )
 }
 
-/** 透明模式右上角悬浮条:平时半透,鼠标移上去才清晰 */
 function StealthFloatBar({
   autoScroll,
   onToggleScroll,
