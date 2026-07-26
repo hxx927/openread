@@ -28,7 +28,9 @@ jobs:
         run: pnpm install
 
       - name: Build Windows installer + portable
-        run: pnpm run build:win
+        run: |
+          pnpm run vite:build:app
+          pnpm exec electron-builder --win --publish never
 
       # 打了 v* 标签时:把安装包/便携版传到 GitHub Release,供下载
       - name: Attach to Release
