@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { BookOpen, Globe, Sparkles } from 'lucide-react'
+import { BookOpen, Globe, Sparkles, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReaderView from '@/app/features/reader/ReaderView'
 import BrowserView from '@/app/features/browser/BrowserView'
 import AiView from '@/app/features/ai/AiView'
 import StealthBar from '@/app/features/native/StealthBar'
+import LockSettings from '@/app/features/lock/LockSettings'
 
 type View = 'reader' | 'browser' | 'ai'
 
@@ -16,6 +17,7 @@ const NAV: { key: View; label: string; icon: typeof BookOpen }[] = [
 
 export default function Shell() {
   const [view, setView] = useState<View>('reader')
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -38,6 +40,15 @@ export default function Shell() {
               {n.label}
             </button>
           ))}
+          <div className="flex-1" />
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="设置(密码锁)"
+            className="flex w-11 flex-col items-center gap-1 rounded-lg py-2 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          >
+            <Settings className="size-5" />
+            设置
+          </button>
         </nav>
 
         {/* 主视图:三个视图都常驻挂载(用 hidden 切换),保持各自状态(浏览标签、AI 登录、阅读进度) */}
@@ -56,6 +67,8 @@ export default function Shell() {
 
       {/* 底部摸鱼工具条 */}
       <StealthBar />
+
+      {settingsOpen && <LockSettings onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }

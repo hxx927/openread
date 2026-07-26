@@ -3,6 +3,7 @@ import { windowIpcSchema } from './window-schema'
 import { appIpcSchema } from './app-schema'
 import { nativeIpcSchema } from './native-schema'
 import { readerIpcSchema } from './reader-schema'
+import { lockIpcSchema } from './lock-schema'
 
 // Define all IPC channel schemas in one place
 export const ipcSchemas = {
@@ -10,6 +11,7 @@ export const ipcSchemas = {
   ...appIpcSchema,
   ...nativeIpcSchema,
   ...readerIpcSchema,
+  ...lockIpcSchema,
 } as const
 
 // Extract types from Zod schemas

@@ -6,6 +6,7 @@ import { registerWindowHandlers } from '@/lib/conveyor/handlers/window-handler'
 import { registerAppHandlers } from '@/lib/conveyor/handlers/app-handler'
 import { registerNativeHandlers, unregisterNativeShortcuts } from '@/lib/conveyor/handlers/native-handler'
 import { registerReaderHandlers } from '@/lib/conveyor/handlers/reader-handler'
+import { registerLockHandlers } from '@/lib/conveyor/handlers/lock-handler'
 import { loadBounds, trackBounds } from './window-state'
 
 export function createAppWindow(): void {
@@ -44,6 +45,7 @@ export function createAppWindow(): void {
   registerAppHandlers(app)
   registerNativeHandlers(mainWindow)
   registerReaderHandlers(mainWindow)
+  registerLockHandlers(mainWindow)
 
   if (saved?.maximized) mainWindow.maximize()
   trackBounds(mainWindow)
