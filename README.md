@@ -15,7 +15,10 @@
 
 ### ☁️ 网络书源(自定义 JS 书源)
 - **导入书源 → 跨源搜索 → 看目录 → 读正文**,全在应用内完成
+- 支持两种书源:**纯 JS 书源**(`.js`/`.txt`)与 **轻悦时光书源**(`.json`,外壳里 `html` 字段装整页脚本)
+- 导入方式:**本地文件 / 粘贴代码 / 粘贴链接**
 - 书源就是一段 **JS 脚本**(不是复杂规则 DSL),实现 `search / info / chapter / content` 即可
+- 内置 `flutter_inappwebview.callHandler` 兼容桥,轻悦时光书源自带的 `Http`/`Cache` 类可直接工作
 - 运行时注入 `Http`(主进程代发,免跨域、自动处理 GBK/GB18030)、`Cache`、`Cookie`、`parseHTMLSafely`、jQuery、CryptoJS
 - **安全**:书源跑在隔离的沙箱 webview 里(独立 partition、contextIsolation),拿不到本机文件与应用 IPC
 - 附示例书源 [`sample/书源示例-维基文库.js`](./sample/书源示例-维基文库.js)(基于公有领域的中文维基文库)

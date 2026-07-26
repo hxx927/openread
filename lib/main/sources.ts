@@ -12,8 +12,47 @@ export interface BookSource {
   id: string
   name: string
   enabled: boolean
-  code: string // 书源 JS 源码
+  code: string // js 类型:JS 源码;html 类型:整页 HTML(轻悦时光书源的 html 字段)
+  kind: 'js' | 'html'
   addedAt: number
+}
+
+/** 解析导入内容:支持纯 JS 书源、以及轻悦时光的 JSON(外壳里 html 字段装整页 HTML) */
+export function parseSourceFile(text: string, fallbackName?: string): { name: string; code: string; kind: 'js' | 'html' }[] {
+  const raw = text.trim()
+  if (!raw) throw new Error('内容为空')
+
+  // JSON 外壳(轻悦时光书源;也可能是一个数组装多个书源)
+  if (raw.startsWith('[') || raw.startsWith('{')) {
+    let json: unknown
+    try {
+      json = JSON.parse(raw)
+    } catch {
+      json = null
+    }
+    if (json) {
+      const arr = Array.isArray(json) ? json : [json]
+      const out: { name: string; code: string; kind: 'js' | 'html' }[] = []
+      for (const it of arr as Record<string, unknown>[]) {
+        const name = String(it.bookSourceName || it.name || fallbackName || '未命名书源')
+        if (typeof it.html === 'string' && it.html.trim()) {
+          out.push({ name, code: it.html, kind: 'html' })
+        } else if (typeof it.js === 'string' && it.js.trim()) {
+          out.push({ name, code: it.js, kind: 'js' })
+        }
+      }
+      if (out.length) return out
+      throw new Error(
+        '这是 JSON 规则书源(阅读 / Legado 格式),当前引擎只支持 JS 书源与轻悦时光书源(含 html 字段)'
+      )
+    }
+  }
+
+  // 纯 JS 书源
+  if (!/function\s+(search|content|chapter)/.test(raw)) {
+    throw new Error('未找到 search / chapter / content 函数,可能不是 JS 书源')
+  }
+  return [{ name: fallbackName || guessName(raw), code: raw, kind: 'js' }]
 }
 
 const file = () => join(app.getPath('userData'), 'sources.json')
@@ -44,48 +83,35 @@ function guessName(code: string): string {
 export const sources = {
   list: () => readAll(),
 
-  async add(code: string, name?: string): Promise<BookSource> {
+  /** 导入:自动识别 纯JS / 轻悦时光JSON(可含多个书源) */
+  async add(text: string, name?: string): Promise<BookSource[]> {
+    const parsed = parseSourceFile(text, name)
     const list = await readAll()
-    const src: BookSource = {
-      id: `src-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      name: (name || guessName(code)).slice(0, 60),
+    const added: BookSource[] = parsed.map((p, i) => ({
+      id: `src-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}`,
+      name: p.name.slice(0, 60),
       enabled: true,
-      code,
+      code: p.code,
+      kind: p.kind,
       addedAt: Date.now(),
-    }
-    list.unshift(src)
+    }))
+    list.unshift(...added)
     await writeAll(list)
-    return src
+    return added
   },
 
-  /** 从链接导入书源:抓取 URL 内容,校验是 JS 书源后入库 */
-  async addFromUrl(url: string): Promise<BookSource> {
+  /** 从链接导入书源(支持 .js 与轻悦时光 .json) */
+  async addFromUrl(url: string): Promise<BookSource[]> {
     const u = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`
     const res = await httpRequest({ url: u, headers: { 'User-Agent': 'OpenRead/1.0' } })
     if (res.statusCode >= 400) throw new Error(`下载失败(HTTP ${res.statusCode})`)
-    const code = res.data?.trim() ?? ''
-    if (!code) throw new Error('链接内容为空')
+    const text = res.data?.trim() ?? ''
+    if (!text) throw new Error('链接内容为空')
 
-    // 误导入 JSON 规则书源(阅读/Legado 格式)时给出明确提示
-    if (code.startsWith('[') || code.startsWith('{')) {
-      try {
-        JSON.parse(code)
-        throw new Error(
-          '这是 JSON 规则书源(阅读 / Legado 格式),当前引擎只支持 JS 书源(需实现 search/info/chapter/content 函数)'
-        )
-      } catch (e) {
-        if (e instanceof Error && e.message.startsWith('这是 JSON')) throw e
-        // 不是合法 JSON,继续按 JS 处理
-      }
-    }
-    if (!/function\s+(search|content|chapter)/.test(code)) {
-      throw new Error('未在内容中找到 search/chapter/content 函数,可能不是 JS 书源')
-    }
-
-    // 名字优先用书源自带的 @name,没有则退回链接文件名
-    const hasAtName = /\/\/\s*@name\s+\S/.test(code)
-    const fileName = decodeURIComponent(u.split('/').pop() || '').replace(/\.(js|txt)$/i, '')
-    return this.add(code, hasAtName ? undefined : fileName || undefined)
+    // 名字优先用书源自带的(@name / bookSourceName),没有则退回链接文件名
+    const hasAtName = /\/\/\s*@name\s+\S/.test(text)
+    const fileName = decodeURIComponent(u.split('/').pop() || '').replace(/\.(js|txt|json)$/i, '')
+    return this.add(text, hasAtName ? undefined : fileName || undefined)
   },
 
   async remove(id: string): Promise<boolean> {

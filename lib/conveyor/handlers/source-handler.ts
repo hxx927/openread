@@ -13,17 +13,17 @@ export const registerSourceHandlers = (window: BrowserWindow) => {
 
   handle('source-open-file', async () => {
     const res = await dialog.showOpenDialog(window, {
-      title: '导入书源(JS 文件)',
+      title: '导入书源(JS / 轻悦时光 JSON)',
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: '书源', extensions: ['js', 'txt'] },
+        { name: '书源', extensions: ['js', 'json', 'txt'] },
         { name: '所有文件', extensions: ['*'] },
       ],
     })
     if (res.canceled) return []
     return Promise.all(
       res.filePaths.map(async (p) => ({
-        name: basename(p).replace(/\.(js|txt)$/i, ''),
+        name: basename(p).replace(/\.(js|json|txt)$/i, ''),
         code: await readFile(p, 'utf-8'),
       }))
     )

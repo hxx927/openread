@@ -5,19 +5,20 @@ export const bookSourceSchema = z.object({
   name: z.string(),
   enabled: z.boolean(),
   code: z.string(),
+  kind: z.enum(['js', 'html']).default('js'),
   addedAt: z.number(),
 })
 
 export const sourceIpcSchema = {
   // ---- 书源管理 ----
   'source-list': { args: z.tuple([]), return: z.array(bookSourceSchema) },
-  'source-add': { args: z.tuple([z.string(), z.string().optional()]), return: bookSourceSchema },
+  'source-add': { args: z.tuple([z.string(), z.string().optional()]), return: z.array(bookSourceSchema) },
   'source-remove': { args: z.tuple([z.string()]), return: z.boolean() },
   'source-toggle': { args: z.tuple([z.string(), z.boolean()]), return: z.boolean() },
   // 选择本地 .js 书源文件导入,返回文件内容
   'source-open-file': { args: z.tuple([]), return: z.array(z.object({ name: z.string(), code: z.string() })) },
   // 从链接导入书源
-  'source-add-url': { args: z.tuple([z.string()]), return: bookSourceSchema },
+  'source-add-url': { args: z.tuple([z.string()]), return: z.array(bookSourceSchema) },
   // 书源运行时 preload 的 file:// 地址(渲染层建隐藏 webview 时用)
   'source-runtime-preload': { args: z.tuple([]), return: z.string() },
 

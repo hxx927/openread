@@ -101,7 +101,7 @@ export const useSourceStore = create<SourceState>((set, get) => ({
 
     const settled = await Promise.allSettled(
       enabled.map(async (s) => {
-        const list = await sourceEngine.search(s.id, s.code, key, 1)
+        const list = await sourceEngine.search(s, key, 1)
         return (Array.isArray(list) ? list : []).map((b) => ({ ...b, sourceId: s.id, sourceName: s.name }))
       })
     )
@@ -116,18 +116,20 @@ export const useSourceStore = create<SourceState>((set, get) => ({
   },
 
   openBook: async (h) => {
+    const src = get().sources.find((s) => s.id === h.sourceId)
+    if (!src) return
     set({ book: h, chapters: [], loadingChapters: true, content: '', chapterIndex: -1 })
     try {
       let tocUrl = h.tocUrl
       if (!tocUrl) {
         try {
-          const detail = await sourceEngine.info(h.sourceId, sourceCode(get, h.sourceId), h.bookUrl)
+          const detail = await sourceEngine.info(src, h.bookUrl)
           tocUrl = detail?.tocUrl || h.bookUrl
         } catch {
           tocUrl = h.bookUrl
         }
       }
-      const chapters = await sourceEngine.chapter(h.sourceId, sourceCode(get, h.sourceId), tocUrl!)
+      const chapters = await sourceEngine.chapter(src, tocUrl!)
       set({ chapters: Array.isArray(chapters) ? chapters : [], loadingChapters: false })
     } catch (e) {
       set({ loadingChapters: false, errors: [`目录加载失败: ${(e as Error).message}`] })
@@ -137,11 +139,12 @@ export const useSourceStore = create<SourceState>((set, get) => ({
   openChapter: async (index) => {
     const { book, chapters } = get()
     const ch = chapters[index]
-    if (!book || !ch) return
+    const src = book && get().sources.find((s) => s.id === book.sourceId)
+    if (!book || !ch || !src) return
     set({ chapterIndex: index, loadingContent: true, content: '' })
     try {
-      const url = ch.url || ch.chapterId || ''
-      const text = await sourceEngine.content(book.sourceId, sourceCode(get, book.sourceId), String(url))
+      const url = ch.chapterId || ch.url || ''
+      const text = await sourceEngine.content(src, String(url))
       set({ content: typeof text === 'string' ? text : String(text ?? ''), loadingContent: false })
     } catch (e) {
       set({ content: `【正文加载失败】${(e as Error).message}`, loadingContent: false })
@@ -151,8 +154,3 @@ export const useSourceStore = create<SourceState>((set, get) => ({
   backToList: () => set({ chapterIndex: -1, content: '' }),
   closeBook: () => set({ book: null, chapters: [], chapterIndex: -1, content: '' }),
 }))
-
-/** 取书源代码(运行时按 id 缓存,这里只是补参数) */
-function sourceCode(get: () => SourceState, id: string): string {
-  return get().sources.find((s) => s.id === id)?.code ?? ''
-}

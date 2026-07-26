@@ -269,7 +269,7 @@ function SourceManager({ onClose }: { onClose: () => void }) {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !urlBusy && doImportUrl()}
-              placeholder="粘贴书源链接(.js),回车导入"
+              placeholder="粘贴书源链接(.js / 轻悦 .json),回车导入"
               className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
               spellCheck={false}
             />
@@ -322,6 +322,9 @@ function SourceManager({ onClose }: { onClose: () => void }) {
                 <span className={cn('flex-1 truncate text-xs', !s.enabled && 'text-muted-foreground line-through')}>
                   {s.name}
                 </span>
+                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {s.kind === 'html' ? '轻悦' : 'JS'}
+                </span>
                 <button onClick={() => removeSource(s.id)} className="rounded p-1 text-muted-foreground hover:bg-muted">
                   <Trash2 className="size-3.5" />
                 </button>
@@ -331,7 +334,7 @@ function SourceManager({ onClose }: { onClose: () => void }) {
         </div>
 
         <p className="mt-3 border-t border-border pt-2 text-[10px] leading-relaxed text-muted-foreground">
-          支持 <b>JS 书源</b>(.js/.txt,需实现 search / info / chapter / content)—— 可用文件、链接或粘贴导入。
+          支持 <b>JS 书源</b>(.js/.txt)与 <b>轻悦时光书源</b>(.json,含 html 字段)—— 文件 / 链接 / 粘贴均可导入。
           暂不支持阅读(Legado)的 JSON 规则书源。
           <br />
           书源为中立工具,内容由你自行导入的书源提供。请使用合法、已授权的来源。

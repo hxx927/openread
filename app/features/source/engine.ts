@@ -65,6 +65,59 @@ const BOOTSTRAP = `
   window.base64Decode = (s) => { try { return decodeURIComponent(escape(atob(s))) } catch (e) { return atob(s) } }
   window.base64Encode = (s) => btoa(unescape(encodeURIComponent(String(s))))
 
+  /**
+   * 兼容层:轻悦时光(qysg)书源自带 Http/Cache 类,底层调 flutter_inappwebview.callHandler。
+   * 这里把它桥接到我们的主进程能力,使这类书源可以直接运行。
+   */
+  window.flutter_inappwebview = {
+    callHandler: async (name, ...a) => {
+      switch (name) {
+        case 'http': {
+          // (method, url, body, headersJson, followRedirects, contenttype)
+          const [method, url, body, headersJson, followRedirects, contenttype] = a
+          let headers = {}
+          try { headers = headersJson ? JSON.parse(headersJson) : {} } catch (e) { headers = {} }
+          if (contenttype && !headers['Content-Type'] && !headers['content-type']) headers['Content-Type'] = contenttype
+          return await H.http({
+            url: String(url),
+            method: String(method || 'get').toUpperCase(),
+            headers,
+            body: body ? String(body) : undefined,
+            followRedirects: followRedirects !== false,
+          })
+        }
+        case 'cache.get': return await H.cacheGet(String(a[0]))
+        case 'cache.set': return await H.cacheSet(String(a[0]), String(a[1]))
+        case 'cache.remove': return await H.cacheRemove(String(a[0]))
+
+        case 'base64encode': return window.base64Encode(a[0])
+        case 'base64decode': return window.base64Decode(a[0])
+        case 'htmlToText': return window.removeHTMLTags(a[0])
+        case 'getWebViewUA': return navigator.userAgent
+        case 'version': return '1.0.0'
+        case 'buildNumber': return '1'
+        case 'device': return 'OpenRead'
+        case 'id': return 'openread'
+        case 'CookieJar': return true
+        case 'getdurChapterIndex': return 0
+        case 'getLoginUser': return ''
+        case 'toTraditional': case 'toSimplified': return a[0]
+        case 'log': console.log('[书源]', ...a); return true
+        case 'showToast': console.log('[书源提示]', ...a); return true
+        // 以下能力当前未实现(需要宿主 UI 配合),返回空值让书源走降级分支
+        case 'webview': case 'webviewajax': case 'openurl': case 'startBrowser':
+        case 'startBrowserWithShouldOverrideUrlLoading': case 'startBrowserDp':
+        case 'back': case 'getVerificationCode': case 'addbook': case 'voice': case 'text':
+        case 'utf8ToGbkUrlEncoded':
+          console.log('[书源] 未实现的宿主能力:', name)
+          return null
+        default:
+          console.log('[书源] 未知 callHandler:', name)
+          return null
+      }
+    },
+  }
+
   // 统一调用入口:返回 JSON 字符串(executeJavaScript 只能回传可序列化值)
   window.__call = async (fn, args) => {
     try {
@@ -116,11 +169,26 @@ export interface SourceChapter {
   isVolume?: boolean
 }
 
+/** 从整页 HTML 里抽出内联 <script> 代码(跳过带 src 的外链脚本) */
+function extractScripts(html: string): string[] {
+  const out: string[] = []
+  const re = /<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(html))) {
+    const body = m[1].trim()
+    if (body) out.push(body)
+  }
+  return out
+}
+
 class SourceRuntime {
   private wv: WebviewElement | null = null
   private booting: Promise<void> | null = null
 
-  constructor(private code: string) {}
+  constructor(
+    private code: string,
+    private kind: 'js' | 'html' = 'js'
+  ) {}
 
   private boot(): Promise<void> {
     if (this.booting) return this.booting
@@ -153,7 +221,15 @@ class SourceRuntime {
       await wv.executeJavaScript(jquerySrc)
       await wv.executeJavaScript(cryptoSrc)
       await wv.executeJavaScript(BOOTSTRAP)
-      await wv.executeJavaScript(this.code) // 书源本体
+
+      // 书源本体:纯 JS 直接注入;轻悦时光书源(整页 HTML)则抽出内联 script 依次注入
+      if (this.kind === 'html') {
+        const scripts = extractScripts(this.code)
+        if (!scripts.length) throw new Error('书源 HTML 中没有找到可执行脚本')
+        for (const s of scripts) await wv.executeJavaScript(s)
+      } else {
+        await wv.executeJavaScript(this.code)
+      }
     })()
     return this.booting
   }
@@ -181,11 +257,17 @@ class SourceRuntime {
 /** 每个书源一个运行时实例(按 id 缓存,避免全局变量互相污染) */
 const runtimes = new Map<string, SourceRuntime>()
 
-function runtimeFor(id: string, code: string): SourceRuntime {
-  let rt = runtimes.get(id)
+export interface SourceRef {
+  id: string
+  code: string
+  kind?: 'js' | 'html'
+}
+
+function runtimeFor(s: SourceRef): SourceRuntime {
+  let rt = runtimes.get(s.id)
   if (!rt) {
-    rt = new SourceRuntime(code)
-    runtimes.set(id, rt)
+    rt = new SourceRuntime(s.code, s.kind ?? 'js')
+    runtimes.set(s.id, rt)
   }
   return rt
 }
@@ -203,13 +285,8 @@ export function disposeAllRuntimes(): void {
 /* ---------------- 对外 API ---------------- */
 
 export const sourceEngine = {
-  search: (id: string, code: string, key: string, page = 1) =>
-    runtimeFor(id, code).call<SourceBook[]>('search', [key, page]),
-
-  info: (id: string, code: string, bookUrl: string) => runtimeFor(id, code).call<SourceBook>('info', [bookUrl]),
-
-  chapter: (id: string, code: string, tocUrl: string) =>
-    runtimeFor(id, code).call<SourceChapter[]>('chapter', [tocUrl]),
-
-  content: (id: string, code: string, url: string) => runtimeFor(id, code).call<string>('content', [url]),
+  search: (s: SourceRef, key: string, page = 1) => runtimeFor(s).call<SourceBook[]>('search', [key, page]),
+  info: (s: SourceRef, bookUrl: string) => runtimeFor(s).call<SourceBook>('info', [bookUrl]),
+  chapter: (s: SourceRef, tocUrl: string) => runtimeFor(s).call<SourceChapter[]>('chapter', [tocUrl]),
+  content: (s: SourceRef, url: string) => runtimeFor(s).call<string>('content', [url]),
 }
