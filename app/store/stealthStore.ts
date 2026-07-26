@@ -35,8 +35,16 @@ export const useStealthStore = create<StealthState>((set, get) => {
     bossKeyEnabled: persisted.bossKeyEnabled,
     autoHideOnBlur: persisted.autoHideOnBlur,
 
-    setTransparent: (v) => set({ transparent: v, autoScroll: v ? get().autoScroll : false }),
-    toggleTransparent: () => set({ transparent: !get().transparent, autoScroll: false }),
+    // 进入透明模式:整窗半透(setOpacity);退出:恢复不透明。稳定、不依赖透明窗口。
+    setTransparent: (v) => {
+      native().setOpacity(v ? 0.8 : 1)
+      set({ transparent: v, autoScroll: v ? get().autoScroll : false })
+    },
+    toggleTransparent: () => {
+      const v = !get().transparent
+      native().setOpacity(v ? 0.8 : 1)
+      set({ transparent: v, autoScroll: false })
+    },
     toggleAutoScroll: () => set({ autoScroll: !get().autoScroll }),
 
     // 启动时把持久化的隐蔽偏好同步到主进程

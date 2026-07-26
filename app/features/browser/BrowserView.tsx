@@ -23,15 +23,8 @@ import type { WebviewElement } from '@/app/types/webview'
 
 const PARTITION = 'persist:openread-web' // 持久分区:各站登录状态得以保留
 
-/** 透明摸鱼:抠掉页面背景,让正文浮在桌面上(仿墨鱼 browser-transparency.js) */
-const TRANSPARENCY_CSS = `
-  html, body { background: transparent !important; background-image: none !important; }
-  body * { background-color: transparent !important; background-image: none !important; box-shadow: none !important; }
-  ::-webkit-scrollbar { width: 0 !important; height: 0 !important; }
-`
-
-/** 单个标签页:持有一个 <webview>,并把它的状态回写到 store */
-function BrowserTab({ tab, transparent }: { tab: Tab; transparent: boolean }) {
+/** 单个标签页:持有一个 <webview>,并把它的状态回写到 store。切换透明模式不重建它。 */
+function BrowserTab({ tab }: { tab: Tab }) {
   const ref = useRef<WebviewElement | null>(null)
   const initialUrl = useRef(tab.url)
   const patchTab = useBrowserStore((s) => s.patchTab)
@@ -68,32 +61,6 @@ function BrowserTab({ tab, transparent }: { tab: Tab; transparent: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab.id])
 
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    let key: string | null = null
-    let cancelled = false
-    const inject = async () => {
-      try {
-        key = await el.insertCSS(TRANSPARENCY_CSS)
-      } catch {
-        /* 页面尚未就绪 */
-      }
-    }
-    const onLoad = () => {
-      if (!cancelled && transparent) inject()
-    }
-    if (transparent) {
-      inject()
-      el.addEventListener('did-finish-load', onLoad)
-    }
-    return () => {
-      cancelled = true
-      el.removeEventListener('did-finish-load', onLoad)
-      if (key) el.removeInsertedCSS(key).catch(() => {})
-    }
-  }, [transparent])
-
   return (
     <webview
       ref={ref as unknown as React.Ref<HTMLElement>}
@@ -101,7 +68,6 @@ function BrowserTab({ tab, transparent }: { tab: Tab; transparent: boolean }) {
       partition={PARTITION}
       allowpopups={'true'}
       className="h-full w-full"
-      style={{ background: 'transparent' }}
     />
   )
 }
@@ -135,117 +101,112 @@ export default function BrowserView() {
     setEditing(false)
   }
 
-  // 只为「已打开网页」的标签渲染 webview;导航主页不占 webview
-  const stack = (
-    <>
-      {tabs
-        .filter((t) => t.url)
-        .map((t) => (
-          <div key={t.id} className={cn('absolute inset-0', t.id === activeId ? 'block' : 'hidden')}>
-            <BrowserTab tab={t} transparent={transparent} />
-          </div>
-        ))}
-      {activeIsHome && (
-        <div className="absolute inset-0">
-          <NavHome onOpen={navigate} />
-        </div>
-      )}
-    </>
-  )
-
-  // 透明摸鱼模式:只留正文 + 右上角悬浮条
-  if (transparent) {
-    return (
-      <div className="relative h-full w-full bg-transparent">
-        {stack}
-        <StealthFloatBar
-          autoScroll={autoScroll}
-          onToggleScroll={toggleAutoScroll}
-          onExit={() => setTransparent(false)}
-          onBack={() => el()?.goBack()}
-          onReload={() => el()?.reload()}
-        />
-      </div>
-    )
-  }
-
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
-      {/* 标签条 */}
-      <div className="flex items-center gap-1 border-b border-border px-2 pt-1.5">
-        <div className="flex flex-1 items-end gap-1 overflow-x-auto">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setActive(t.id)}
-              className={cn(
-                'group flex max-w-52 min-w-32 items-center gap-2 rounded-t-md px-3 py-1.5 text-xs',
-                t.id === activeId ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/50'
-              )}
-            >
-              <span className={cn('size-1.5 rounded-full', t.loading ? 'bg-amber-400' : 'bg-emerald-500/70')} />
-              <span className="flex-1 truncate text-left">{t.title}</span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation()
-                  closeTab(t.id)
-                }}
-                className="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-foreground/10"
-              >
-                <X className="size-3" />
-              </span>
+      {/* 顶部 chrome:透明摸鱼模式下隐藏 */}
+      {!transparent && (
+        <>
+          {/* 标签条 */}
+          <div className="flex items-center gap-1 border-b border-border px-2 pt-1.5">
+            <div className="flex flex-1 items-end gap-1 overflow-x-auto">
+              {tabs.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setActive(t.id)}
+                  className={cn(
+                    'group flex max-w-52 min-w-32 items-center gap-2 rounded-t-md px-3 py-1.5 text-xs',
+                    t.id === activeId ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/50'
+                  )}
+                >
+                  <span className={cn('size-1.5 rounded-full', t.loading ? 'bg-amber-400' : 'bg-emerald-500/70')} />
+                  <span className="flex-1 truncate text-left">{t.title}</span>
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      closeTab(t.id)
+                    }}
+                    className="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-foreground/10"
+                  >
+                    <X className="size-3" />
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => newTab()} className="mb-1 rounded p-1 text-muted-foreground hover:bg-muted" title="新标签页">
+              <Plus className="size-4" />
             </button>
+          </div>
+
+          {/* 地址栏 + 导航 */}
+          <div className="flex items-center gap-1 border-b border-border px-2 py-1.5">
+            <NavBtn title="后退" disabled={!active?.canGoBack} onClick={() => el()?.goBack()}>
+              <ArrowLeft className="size-4" />
+            </NavBtn>
+            <NavBtn title="前进" disabled={!active?.canGoForward} onClick={() => el()?.goForward()}>
+              <ArrowRight className="size-4" />
+            </NavBtn>
+            <NavBtn title="刷新" disabled={activeIsHome} onClick={() => el()?.reload()}>
+              <RotateCw className={cn('size-4', active?.loading && 'animate-spin')} />
+            </NavBtn>
+            <NavBtn title="导航主页" onClick={goHome}>
+              <House className="size-4" />
+            </NavBtn>
+            <div className="mx-1 flex flex-1 items-center gap-2 rounded-md bg-muted px-3 py-1.5">
+              <Search className="size-3.5 text-muted-foreground" />
+              <input
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                onFocus={() => setEditing(true)}
+                onBlur={() => setEditing(false)}
+                onKeyDown={(e) => e.key === 'Enter' && go()}
+                placeholder="输入网址或搜索…"
+                className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                spellCheck={false}
+              />
+            </div>
+            <button
+              onClick={toggleTransparent}
+              disabled={activeIsHome}
+              className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-30"
+              title="透明摸鱼模式:窗口半透,浮在桌面上"
+            >
+              <Ghost className="size-4" />
+              透明
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* 内容区:位置固定,切换透明不重建 webview */}
+      <div className={cn('relative flex-1', activeIsHome ? 'bg-background' : 'bg-white')}>
+        {tabs
+          .filter((t) => t.url)
+          .map((t) => (
+            <div key={t.id} className={cn('absolute inset-0', t.id === activeId ? 'block' : 'hidden')}>
+              <BrowserTab tab={t} />
+            </div>
           ))}
-        </div>
-        <button onClick={() => newTab()} className="mb-1 rounded p-1 text-muted-foreground hover:bg-muted" title="新标签页">
-          <Plus className="size-4" />
-        </button>
-      </div>
+        {activeIsHome && (
+          <div className="absolute inset-0">
+            <NavHome onOpen={navigate} />
+          </div>
+        )}
 
-      {/* 地址栏 + 导航 */}
-      <div className="flex items-center gap-1 border-b border-border px-2 py-1.5">
-        <NavBtn title="后退" disabled={!active?.canGoBack} onClick={() => el()?.goBack()}>
-          <ArrowLeft className="size-4" />
-        </NavBtn>
-        <NavBtn title="前进" disabled={!active?.canGoForward} onClick={() => el()?.goForward()}>
-          <ArrowRight className="size-4" />
-        </NavBtn>
-        <NavBtn title="刷新" disabled={activeIsHome} onClick={() => el()?.reload()}>
-          <RotateCw className={cn('size-4', active?.loading && 'animate-spin')} />
-        </NavBtn>
-        <NavBtn title="导航主页" onClick={goHome}>
-          <House className="size-4" />
-        </NavBtn>
-        <div className="mx-1 flex flex-1 items-center gap-2 rounded-md bg-muted px-3 py-1.5">
-          <Search className="size-3.5 text-muted-foreground" />
-          <input
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            onFocus={() => setEditing(true)}
-            onBlur={() => setEditing(false)}
-            onKeyDown={(e) => e.key === 'Enter' && go()}
-            placeholder="输入网址或搜索…"
-            className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-            spellCheck={false}
+        {transparent && (
+          <StealthFloatBar
+            autoScroll={autoScroll}
+            onToggleScroll={toggleAutoScroll}
+            onExit={() => setTransparent(false)}
+            onBack={() => el()?.goBack()}
+            onReload={() => el()?.reload()}
           />
-        </div>
-        <button
-          onClick={toggleTransparent}
-          disabled={activeIsHome}
-          className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-30"
-          title="透明摸鱼模式:把网页正文变透明,浮在桌面上"
-        >
-          <Ghost className="size-4" />
-          透明
-        </button>
+        )}
       </div>
-
-      {/* 内容区:导航主页 或 网页 */}
-      <div className={cn('relative flex-1', activeIsHome ? 'bg-background' : 'bg-white')}>{stack}</div>
     </div>
   )
 }
 
+/** 透明模式右上角悬浮条:平时半透,鼠标移上去才清晰 */
 function StealthFloatBar({
   autoScroll,
   onToggleScroll,
@@ -262,8 +223,8 @@ function StealthFloatBar({
   const { opacity, alwaysOnTop, contentProtection, setOpacity, setAlwaysOnTop, setContentProtection } = useNative()
 
   return (
-    <div className="absolute top-3 right-3 z-10 opacity-25 transition-opacity duration-300 hover:opacity-100">
-      <div className="flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-muted-foreground shadow-lg backdrop-blur">
+    <div className="absolute top-3 right-3 z-10 opacity-30 transition-opacity duration-300 hover:opacity-100">
+      <div className="flex items-center gap-1 rounded-full bg-background px-2 py-1 text-muted-foreground shadow-lg ring-1 ring-border">
         <IconBtn title="后退" onClick={onBack}>
           <ArrowLeft className="size-4" />
         </IconBtn>

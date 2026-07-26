@@ -21,15 +21,6 @@ body,
   line-height: 1.4;
 }
 
-/* 透明摸鱼模式:让应用底层透明,露出桌面 */
-html.stealth-on,
-html.stealth-on body,
-html.stealth-on #app,
-html.stealth-on .window-frame,
-html.stealth-on .window-titlebar {
-  background: transparent !important;
-}
-
 @keyframes shake {
   0%,
   100% {
