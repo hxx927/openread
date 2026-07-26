@@ -59,7 +59,10 @@ function Bookshelf() {
   const { importBooks, openBook, removeBook, addPaths, query, setQuery, sort, setSort, importing, visibleBooks } =
     useReaderStore()
   const books = visibleBooks()
-  const total = useReaderStore((s) => s.books.length)
+  const allBooks = useReaderStore((s) => s.books)
+  const total = allBooks.length
+  // 最近在读(有进度、lastReadAt 最大)
+  const continueBook = [...allBooks].sort((a, b) => b.lastReadAt - a.lastReadAt).find((b) => b.progress > 0)
   const [dragOver, setDragOver] = useState(false)
 
   const onDrop = (e: React.DragEvent) => {
@@ -114,10 +117,13 @@ function Bookshelf() {
       ) : books.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">没有匹配「{query}」的书</div>
       ) : (
-        <div className="grid flex-1 grid-cols-[repeat(auto-fill,minmax(140px,1fr))] content-start gap-5 overflow-auto p-5">
-          {books.map((b) => (
-            <BookCard key={b.id} book={b} onOpen={() => openBook(b)} onRemove={() => removeBook(b.id)} />
-          ))}
+        <div className="flex-1 overflow-auto p-5">
+          {continueBook && !query.trim() && <ContinueCard book={continueBook} onOpen={() => openBook(continueBook)} />}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] content-start gap-5">
+            {books.map((b) => (
+              <BookCard key={b.id} book={b} onOpen={() => openBook(b)} onRemove={() => removeBook(b.id)} />
+            ))}
+          </div>
         </div>
       )}
 
@@ -127,6 +133,41 @@ function Bookshelf() {
         </div>
       )}
     </div>
+  )
+}
+
+function ContinueCard({ book, onOpen }: { book: Book; onOpen: () => void }) {
+  const color = FORMAT_COLORS[book.format] ?? '#666'
+  return (
+    <button
+      onClick={onOpen}
+      className="mb-5 flex w-full items-center gap-4 rounded-xl border border-border bg-card p-3 text-left shadow-sm transition-colors hover:border-primary/40"
+    >
+      <div
+        className="h-20 w-14 shrink-0 overflow-hidden rounded-md ring-1 ring-border"
+        style={{ background: book.cover ? undefined : color }}
+      >
+        {book.cover ? (
+          <img src={book.cover} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <BookOpen className="size-5 text-white/80" />
+          </div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] text-muted-foreground">继续阅读</p>
+        <p className="truncate text-sm font-semibold">{book.title}</p>
+        <p className="truncate text-xs text-muted-foreground">{book.author || '未知作者'}</p>
+        <div className="mt-2 flex items-center gap-2">
+          <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+            <div className="h-full bg-primary" style={{ width: `${Math.round(book.progress * 100)}%` }} />
+          </div>
+          <span className="text-[11px] text-muted-foreground tabular-nums">{Math.round(book.progress * 100)}%</span>
+        </div>
+      </div>
+      <span className="shrink-0 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground">继续</span>
+    </button>
   )
 }
 
