@@ -1,5 +1,6 @@
 import { Tray, Menu, nativeImage, app, type BrowserWindow } from 'electron'
 import appIcon from '@/resources/build/icon.png?asset'
+import { revealWindow } from './autohide'
 
 let tray: Tray | null = null
 
@@ -9,19 +10,11 @@ export function createTray(window: BrowserWindow): Tray {
   tray = new Tray(image.isEmpty() ? nativeImage.createFromPath(appIcon) : image)
   tray.setToolTip('OpenRead · 摸鱼阅读')
 
-  const show = () => {
-    window.show()
-    window.focus()
-  }
-
-  tray.on('click', () => {
-    if (window.isVisible() && !window.isMinimized()) window.hide()
-    else show()
-  })
+  tray.on('click', () => revealWindow()) // 唤回窗口并解除自动隐藏锁定
 
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '显示 OpenRead', click: show },
+      { label: '显示 OpenRead', click: () => revealWindow() },
       { label: '隐藏', click: () => window.hide() },
       { type: 'separator' },
       { label: '退出', click: () => app.quit() },
