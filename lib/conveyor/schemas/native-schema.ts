@@ -46,4 +46,16 @@ export const nativeIpcSchema = {
     args: z.tuple([z.string().min(1)]),
     return: z.boolean(),
   },
+
+  // 老板键总开关(默认关):开启才注册全局快捷键
+  'native-set-boss-key-enabled': {
+    args: z.tuple([z.boolean()]),
+    return: z.boolean(),
+  },
+
+  // 失焦自动隐藏(默认关):点到别的窗口即最小化,点任务栏图标恢复
+  'native-set-auto-hide-on-blur': {
+    args: z.tuple([z.boolean()]),
+    return: z.boolean(),
+  },
 }

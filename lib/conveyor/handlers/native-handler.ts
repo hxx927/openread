@@ -7,11 +7,12 @@ const state = {
   alwaysOnTop: false,
   contentProtection: false,
   bossKey: 'Control+Shift+X',
+  bossKeyEnabled: false,
 }
 
-/** 显示 / 隐藏窗口(老板键与手动隐藏共用) */
+/** 显示 / 隐藏窗口(老板键) */
 function toggleVisible(window: BrowserWindow): boolean {
-  if (window.isVisible()) {
+  if (window.isVisible() && !window.isMinimized()) {
     window.hide()
     return false
   }
@@ -20,7 +21,7 @@ function toggleVisible(window: BrowserWindow): boolean {
   return true
 }
 
-/** 注册老板键全局快捷键;先清掉旧的,返回是否成功 */
+/** 注册/更新老板键全局快捷键 */
 function registerBossKey(window: BrowserWindow, accelerator: string): boolean {
   globalShortcut.unregister(state.bossKey)
   try {
@@ -33,8 +34,8 @@ function registerBossKey(window: BrowserWindow, accelerator: string): boolean {
 }
 
 export const registerNativeHandlers = (window: BrowserWindow) => {
-  // 启动即注册默认老板键
-  registerBossKey(window, state.bossKey)
+  // 失焦最小化:点到别的窗口就最小化,点任务栏图标恢复
+  let blurHandler: (() => void) | null = null
 
   handle('native-get-state', () => ({
     opacity: state.opacity,
@@ -51,14 +52,12 @@ export const registerNativeHandlers = (window: BrowserWindow) => {
 
   handle('native-set-always-on-top', (enabled: boolean) => {
     state.alwaysOnTop = enabled
-    // screen-saver 级别可浮在全屏应用之上,最适合"摸鱼"
     window.setAlwaysOnTop(enabled, 'screen-saver')
     return enabled
   })
 
   handle('native-set-content-protection', (enabled: boolean) => {
     state.contentProtection = enabled
-    // 开启后:微信/钉钉截图、系统截图、录屏软件都拍不到本窗口
     window.setContentProtection(enabled)
     return enabled
   })
@@ -66,6 +65,27 @@ export const registerNativeHandlers = (window: BrowserWindow) => {
   handle('native-toggle-visible', () => toggleVisible(window))
 
   handle('native-set-boss-key', (accelerator: string) => registerBossKey(window, accelerator))
+
+  handle('native-set-boss-key-enabled', (enabled: boolean) => {
+    state.bossKeyEnabled = enabled
+    if (enabled) return registerBossKey(window, state.bossKey)
+    globalShortcut.unregister(state.bossKey)
+    return false
+  })
+
+  handle('native-set-auto-hide-on-blur', (enabled: boolean) => {
+    if (blurHandler) {
+      window.removeListener('blur', blurHandler)
+      blurHandler = null
+    }
+    if (enabled) {
+      blurHandler = () => {
+        if (!window.isDestroyed() && !window.isMinimized()) window.minimize()
+      }
+      window.on('blur', blurHandler)
+    }
+    return enabled
+  })
 }
 
 /** 应用退出时清理全局快捷键 */

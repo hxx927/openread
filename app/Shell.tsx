@@ -72,8 +72,8 @@ export default function Shell() {
         </main>
       </div>
 
-      {/* 底部摸鱼工具条 */}
-      <StealthBar />
+      {/* 底部摸鱼工具条;透明模式下隐藏,控制移到浏览器右上角悬浮条 */}
+      {!transparent && <StealthBar />}
 
       {settingsOpen && <LockSettings onClose={() => setSettingsOpen(false)} />}
     </div>

@@ -7,4 +7,6 @@ export class NativeApi extends ConveyorApi {
   setContentProtection = (enabled: boolean) => this.invoke('native-set-content-protection', enabled)
   toggleVisible = () => this.invoke('native-toggle-visible')
   setBossKey = (accelerator: string) => this.invoke('native-set-boss-key', accelerator)
+  setBossKeyEnabled = (enabled: boolean) => this.invoke('native-set-boss-key-enabled', enabled)
+  setAutoHideOnBlur = (enabled: boolean) => this.invoke('native-set-auto-hide-on-blur', enabled)
 }
