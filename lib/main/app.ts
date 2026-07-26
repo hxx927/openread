@@ -25,7 +25,9 @@ export function createAppWindow(): void {
     minWidth: 800,
     minHeight: 560,
     show: false,
-    backgroundColor: '#1c1c1c',
+    // 透明窗口:透明摸鱼模式下正文能浮在桌面上(平时靠 UI 自身背景保持不透明观感)
+    transparent: true,
+    backgroundColor: '#00000000',
     icon: appIcon,
     frame: false,
     titleBarStyle: 'hiddenInset',

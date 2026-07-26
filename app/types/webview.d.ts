@@ -18,6 +18,8 @@ export interface WebviewElement extends HTMLElement {
   setZoomLevel(level: number): void
   getZoomLevel(): number
   executeJavaScript(code: string): Promise<unknown>
+  insertCSS(css: string): Promise<string>
+  removeInsertedCSS(key: string): Promise<void>
   openDevTools(): void
 }
 

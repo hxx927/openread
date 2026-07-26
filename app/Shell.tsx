@@ -6,6 +6,7 @@ import BrowserView from '@/app/features/browser/BrowserView'
 import AiView from '@/app/features/ai/AiView'
 import StealthBar from '@/app/features/native/StealthBar'
 import LockSettings from '@/app/features/lock/LockSettings'
+import { useStealthStore } from '@/app/store/stealthStore'
 
 type View = 'reader' | 'browser' | 'ai'
 
@@ -18,12 +19,18 @@ const NAV: { key: View; label: string; icon: typeof BookOpen }[] = [
 export default function Shell() {
   const [view, setView] = useState<View>('reader')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const transparent = useStealthStore((s) => s.transparent)
 
   return (
     <div className="flex h-full w-full flex-col">
       <div className="flex min-h-0 flex-1">
-        {/* 左侧导航(墨鱼风格竖排) */}
-        <nav className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-3">
+        {/* 左侧导航(墨鱼风格竖排);透明摸鱼模式下隐藏,让内容铺满并露出桌面 */}
+        <nav
+          className={cn(
+            'w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-3',
+            transparent ? 'hidden' : 'flex'
+          )}
+        >
           {NAV.map((n) => (
             <button
               key={n.key}
