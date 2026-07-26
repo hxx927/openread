@@ -58,6 +58,36 @@ export const sources = {
     return src
   },
 
+  /** 从链接导入书源:抓取 URL 内容,校验是 JS 书源后入库 */
+  async addFromUrl(url: string): Promise<BookSource> {
+    const u = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`
+    const res = await httpRequest({ url: u, headers: { 'User-Agent': 'OpenRead/1.0' } })
+    if (res.statusCode >= 400) throw new Error(`下载失败(HTTP ${res.statusCode})`)
+    const code = res.data?.trim() ?? ''
+    if (!code) throw new Error('链接内容为空')
+
+    // 误导入 JSON 规则书源(阅读/Legado 格式)时给出明确提示
+    if (code.startsWith('[') || code.startsWith('{')) {
+      try {
+        JSON.parse(code)
+        throw new Error(
+          '这是 JSON 规则书源(阅读 / Legado 格式),当前引擎只支持 JS 书源(需实现 search/info/chapter/content 函数)'
+        )
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith('这是 JSON')) throw e
+        // 不是合法 JSON,继续按 JS 处理
+      }
+    }
+    if (!/function\s+(search|content|chapter)/.test(code)) {
+      throw new Error('未在内容中找到 search/chapter/content 函数,可能不是 JS 书源')
+    }
+
+    // 名字优先用书源自带的 @name,没有则退回链接文件名
+    const hasAtName = /\/\/\s*@name\s+\S/.test(code)
+    const fileName = decodeURIComponent(u.split('/').pop() || '').replace(/\.(js|txt)$/i, '')
+    return this.add(code, hasAtName ? undefined : fileName || undefined)
+  },
+
   async remove(id: string): Promise<boolean> {
     const list = await readAll()
     const next = list.filter((s) => s.id !== id)

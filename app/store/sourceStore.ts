@@ -24,6 +24,7 @@ interface SourceState {
   loadSources: () => Promise<void>
   importFromFile: () => Promise<void>
   addFromText: (code: string, name?: string) => Promise<void>
+  addFromUrl: (url: string) => Promise<string | null> // 返回错误信息,成功为 null
   removeSource: (id: string) => Promise<void>
   toggleSource: (id: string, enabled: boolean) => Promise<void>
 
@@ -63,6 +64,19 @@ export const useSourceStore = create<SourceState>((set, get) => ({
     if (!code.trim()) return
     await api().add(code, name)
     await get().loadSources()
+  },
+
+  addFromUrl: async (url) => {
+    if (!url.trim()) return '请输入链接'
+    try {
+      await api().addUrl(url.trim())
+      await get().loadSources()
+      return null
+    } catch (e) {
+      // 主进程抛出的错误经 IPC 包装,取最后一段可读信息
+      const msg = (e as Error).message || String(e)
+      return msg.replace(/^.*Error(?: invoking remote method '[^']+')?:\s*/s, '')
+    }
   },
 
   removeSource: async (id) => {

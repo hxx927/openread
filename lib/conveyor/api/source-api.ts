@@ -9,6 +9,7 @@ export class SourceApi extends ConveyorApi {
   add = (code: string, name?: string) => this.invoke('source-add', code, name)
   remove = (id: string) => this.invoke('source-remove', id)
   toggle = (id: string, enabled: boolean) => this.invoke('source-toggle', id, enabled)
+  addUrl = (url: string) => this.invoke('source-add-url', url)
   openFile = () => this.invoke('source-open-file')
   runtimePreload = () => this.invoke('source-runtime-preload')
 }

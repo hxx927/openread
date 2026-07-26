@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Link as LinkIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/app/components/ui/switch'
@@ -229,9 +230,21 @@ function ChapterReader() {
 /* ---------------- 书源管理 ---------------- */
 
 function SourceManager({ onClose }: { onClose: () => void }) {
-  const { sources, importFromFile, addFromText, removeSource, toggleSource } = useSourceStore()
+  const { sources, importFromFile, addFromText, addFromUrl, removeSource, toggleSource } = useSourceStore()
   const [text, setText] = useState('')
   const [pasting, setPasting] = useState(false)
+  const [url, setUrl] = useState('')
+  const [urlBusy, setUrlBusy] = useState(false)
+  const [urlErr, setUrlErr] = useState<string | null>(null)
+
+  const doImportUrl = async () => {
+    setUrlBusy(true)
+    setUrlErr(null)
+    const err = await addFromUrl(url)
+    setUrlBusy(false)
+    if (err) setUrlErr(err)
+    else setUrl('')
+  }
 
   return (
     <>
@@ -246,6 +259,34 @@ function SourceManager({ onClose }: { onClose: () => void }) {
           <button onClick={() => setPasting((v) => !v)} className="rounded-md border border-border px-2.5 py-1 text-xs">
             粘贴
           </button>
+        </div>
+
+        {/* 链接导入 */}
+        <div className="mb-3">
+          <div className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5">
+            <LinkIcon className="size-3.5 shrink-0 text-muted-foreground" />
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !urlBusy && doImportUrl()}
+              placeholder="粘贴书源链接(.js),回车导入"
+              className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+              spellCheck={false}
+            />
+            <button
+              onClick={doImportUrl}
+              disabled={urlBusy || !url.trim()}
+              className="shrink-0 rounded bg-primary px-2 py-0.5 text-[11px] text-primary-foreground disabled:opacity-40"
+            >
+              {urlBusy ? <Loader2 className="size-3 animate-spin" /> : '导入'}
+            </button>
+          </div>
+          {urlErr && (
+            <p className="mt-1 flex items-start gap-1 text-[11px] text-destructive">
+              <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+              <span>{urlErr}</span>
+            </p>
+          )}
         </div>
 
         {pasting && (
@@ -290,6 +331,9 @@ function SourceManager({ onClose }: { onClose: () => void }) {
         </div>
 
         <p className="mt-3 border-t border-border pt-2 text-[10px] leading-relaxed text-muted-foreground">
+          支持 <b>JS 书源</b>(.js/.txt,需实现 search / info / chapter / content)—— 可用文件、链接或粘贴导入。
+          暂不支持阅读(Legado)的 JSON 规则书源。
+          <br />
           书源为中立工具,内容由你自行导入的书源提供。请使用合法、已授权的来源。
         </p>
       </div>

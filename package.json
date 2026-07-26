@@ -1,6 +1,6 @@
 {
   "name": "openread",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "OpenRead · 摸鱼阅读 — 网页浏览 + 本地电子书阅读 二合一桌面工具(开源)",
   "main": "./out/main/main.js",
   "license": "MIT",

@@ -29,6 +29,8 @@ export const registerSourceHandlers = (window: BrowserWindow) => {
     )
   })
 
+  handle('source-add-url', (url: string) => sources.addFromUrl(url))
+
   handle('source-runtime-preload', () => pathToFileURL(join(__dirname, '../preload/source-runtime.js')).href)
 
   // 书源运行时能力(由隔离 webview 的 preload 调用)
