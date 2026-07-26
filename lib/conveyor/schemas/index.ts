@@ -4,6 +4,7 @@ import { appIpcSchema } from './app-schema'
 import { nativeIpcSchema } from './native-schema'
 import { readerIpcSchema } from './reader-schema'
 import { lockIpcSchema } from './lock-schema'
+import { sourceIpcSchema } from './source-schema'
 
 // Define all IPC channel schemas in one place
 export const ipcSchemas = {
@@ -12,6 +13,7 @@ export const ipcSchemas = {
   ...nativeIpcSchema,
   ...readerIpcSchema,
   ...lockIpcSchema,
+  ...sourceIpcSchema,
 } as const
 
 // Extract types from Zod schemas

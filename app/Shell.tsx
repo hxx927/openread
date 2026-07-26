@@ -1,17 +1,19 @@
 import { useState } from 'react'
-import { BookOpen, Globe, Sparkles, Settings } from 'lucide-react'
+import { BookOpen, Globe, Sparkles, Settings, Cloud } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ReaderView from '@/app/features/reader/ReaderView'
 import BrowserView from '@/app/features/browser/BrowserView'
 import AiView from '@/app/features/ai/AiView'
+import SourceView from '@/app/features/source/SourceView'
 import StealthBar from '@/app/features/native/StealthBar'
 import LockSettings from '@/app/features/lock/LockSettings'
 import { useStealthStore } from '@/app/store/stealthStore'
 
-type View = 'reader' | 'browser' | 'ai'
+type View = 'reader' | 'source' | 'browser' | 'ai'
 
 const NAV: { key: View; label: string; icon: typeof BookOpen }[] = [
   { key: 'reader', label: '书架', icon: BookOpen },
+  { key: 'source', label: '书源', icon: Cloud },
   { key: 'browser', label: '浏览', icon: Globe },
   { key: 'ai', label: 'AI', icon: Sparkles },
 ]
@@ -62,6 +64,9 @@ export default function Shell() {
         <main className="relative min-w-0 flex-1">
           <Pane show={view === 'reader'}>
             <ReaderView />
+          </Pane>
+          <Pane show={view === 'source'}>
+            <SourceView />
           </Pane>
           <Pane show={view === 'browser'}>
             <BrowserView />

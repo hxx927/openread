@@ -29,6 +29,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           preload: resolve(__dirname, 'lib/preload/preload.ts'),
+          // 书源运行时专用 preload:只暴露 Http/Cache/Cookie,隔离不可信书源代码
+          'source-runtime': resolve(__dirname, 'lib/preload/source-runtime.ts'),
         },
       },
     },

@@ -5,6 +5,7 @@ import { NativeApi } from './native-api'
 import { BrowserApi } from './browser-api'
 import { ReaderApi } from './reader-api'
 import { LockApi } from './lock-api'
+import { SourceApi } from './source-api'
 
 export const conveyor = {
   app: new AppApi(electronAPI),
@@ -13,6 +14,7 @@ export const conveyor = {
   browser: new BrowserApi(electronAPI),
   reader: new ReaderApi(electronAPI),
   lock: new LockApi(electronAPI),
+  source: new SourceApi(electronAPI),
 }
 
 export type ConveyorApi = typeof conveyor
