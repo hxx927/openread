@@ -284,9 +284,16 @@ export function disposeAllRuntimes(): void {
 
 /* ---------------- 对外 API ---------------- */
 
+/**
+ * 注意:轻悦时光书源的实际签名带第二个参数 bookUrl
+ *   chapter(tocUrl, bookUrl) / content(chapterId, bookUrl)
+ * (README 只写了第一个参数,但真实书源用到了第二个,不传会拿不到数据)
+ */
 export const sourceEngine = {
   search: (s: SourceRef, key: string, page = 1) => runtimeFor(s).call<SourceBook[]>('search', [key, page]),
   info: (s: SourceRef, bookUrl: string) => runtimeFor(s).call<SourceBook>('info', [bookUrl]),
-  chapter: (s: SourceRef, tocUrl: string) => runtimeFor(s).call<SourceChapter[]>('chapter', [tocUrl]),
-  content: (s: SourceRef, url: string) => runtimeFor(s).call<string>('content', [url]),
+  chapter: (s: SourceRef, tocUrl: string, bookUrl?: string) =>
+    runtimeFor(s).call<SourceChapter[]>('chapter', [tocUrl, bookUrl ?? tocUrl]),
+  content: (s: SourceRef, chapterId: string, bookUrl?: string) =>
+    runtimeFor(s).call<string>('content', [chapterId, bookUrl ?? '']),
 }

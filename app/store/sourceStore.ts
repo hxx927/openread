@@ -129,7 +129,7 @@ export const useSourceStore = create<SourceState>((set, get) => ({
           tocUrl = h.bookUrl
         }
       }
-      const chapters = await sourceEngine.chapter(src, tocUrl!)
+      const chapters = await sourceEngine.chapter(src, tocUrl!, h.bookUrl)
       set({ chapters: Array.isArray(chapters) ? chapters : [], loadingChapters: false })
     } catch (e) {
       set({ loadingChapters: false, errors: [`目录加载失败: ${(e as Error).message}`] })
@@ -144,7 +144,7 @@ export const useSourceStore = create<SourceState>((set, get) => ({
     set({ chapterIndex: index, loadingContent: true, content: '' })
     try {
       const url = ch.chapterId || ch.url || ''
-      const text = await sourceEngine.content(src, String(url))
+      const text = await sourceEngine.content(src, String(url), book.bookUrl)
       set({ content: typeof text === 'string' ? text : String(text ?? ''), loadingContent: false })
     } catch (e) {
       set({ content: `【正文加载失败】${(e as Error).message}`, loadingContent: false })
