@@ -9,9 +9,12 @@ import {
   Trash2,
   BookOpen,
   Minus,
+  Search,
+  ArrowDownUp,
+  Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useReaderStore, FONT_FORMATS, type Theme } from '@/app/store/readerStore'
+import { useReaderStore, FONT_FORMATS, type Theme, type SortKey } from '@/app/store/readerStore'
 import type { Book } from '@/lib/conveyor/api/reader-api'
 import FoliateViewer from './FoliateViewer'
 import PdfViewer from './PdfViewer'
@@ -38,36 +41,96 @@ const FORMAT_COLORS: Record<string, string> = {
   cbz: '#d6598e',
 }
 
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: 'recent', label: '最近阅读' },
+  { key: 'title', label: '标题' },
+  { key: 'added', label: '导入时间' },
+]
+
 function Bookshelf() {
-  const { books, importBooks, openBook, removeBook } = useReaderStore()
+  const { importBooks, openBook, removeBook, addPaths, query, setQuery, sort, setSort, importing, visibleBooks } =
+    useReaderStore()
+  const books = visibleBooks()
+  const total = useReaderStore((s) => s.books.length)
+  const [dragOver, setDragOver] = useState(false)
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const paths = Array.from(e.dataTransfer.files)
+      .map((f) => window.openread.getPathForFile(f))
+      .filter(Boolean)
+    if (paths.length) addPaths(paths)
+  }
 
   return (
-    <div className="flex h-full flex-col bg-background text-foreground">
-      <div className="flex items-center justify-between border-b border-border px-5 py-3">
-        <h1 className="text-sm font-semibold">我的书架</h1>
+    <div
+      className="relative flex h-full flex-col bg-background text-foreground"
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDragOver(true)
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={onDrop}
+    >
+      <div className="flex items-center gap-3 border-b border-border px-5 py-3">
+        <h1 className="text-sm font-semibold whitespace-nowrap">我的书架</h1>
+        {importing && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+        <div className="flex flex-1 items-center gap-2 rounded-md bg-muted px-3 py-1.5">
+          <Search className="size-3.5 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索书名 / 作者"
+            className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+        <button
+          onClick={() => setSort(SORTS[(SORTS.findIndex((s) => s.key === sort) + 1) % SORTS.length].key)}
+          className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+          title="切换排序"
+        >
+          <ArrowDownUp className="size-3.5" />
+          {SORTS.find((s) => s.key === sort)?.label}
+        </button>
         <button
           onClick={importBooks}
           className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
         >
-          <Plus className="size-4" /> 导入图书
+          <Plus className="size-4" /> 导入
         </button>
       </div>
 
-      {books.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-          <BookOpen className="size-12 opacity-30" />
-          <p className="text-sm">书架空空如也</p>
-          <button onClick={importBooks} className="rounded-md border border-border px-4 py-2 text-xs hover:bg-muted">
-            导入 EPUB / MOBI / AZW3 / PDF / TXT …
-          </button>
-        </div>
+      {total === 0 ? (
+        <EmptyState onImport={importBooks} />
+      ) : books.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">没有匹配「{query}」的书</div>
       ) : (
-        <div className="grid flex-1 grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-5 overflow-auto p-5">
+        <div className="grid flex-1 grid-cols-[repeat(auto-fill,minmax(140px,1fr))] content-start gap-5 overflow-auto p-5">
           {books.map((b) => (
             <BookCard key={b.id} book={b} onOpen={() => openBook(b)} onRemove={() => removeBook(b.id)} />
           ))}
         </div>
       )}
+
+      {dragOver && (
+        <div className="pointer-events-none absolute inset-3 z-30 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-primary/10 text-sm font-medium text-primary">
+          松开鼠标,导入到书架
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EmptyState({ onImport }: { onImport: () => void }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
+      <BookOpen className="size-12 opacity-30" />
+      <p className="text-sm">书架空空如也</p>
+      <button onClick={onImport} className="rounded-md border border-border px-4 py-2 text-xs hover:bg-muted">
+        导入 EPUB / MOBI / AZW3 / PDF / TXT …
+      </button>
+      <p className="text-[11px] opacity-60">也可以直接把电子书文件拖到这里</p>
     </div>
   )
 }
@@ -79,7 +142,7 @@ function BookCard({ book, onOpen, onRemove }: { book: Book; onOpen: () => void; 
       <button
         onClick={onOpen}
         className="relative aspect-[3/4] overflow-hidden rounded-md shadow-sm ring-1 ring-border transition-transform hover:-translate-y-1 hover:shadow-lg"
-        style={{ background: book.cover ? undefined : color }}
+        style={{ background: book.cover ? '#0000' : color }}
       >
         {book.cover ? (
           <img src={book.cover} alt={book.title} className="h-full w-full object-cover" />
@@ -87,7 +150,7 @@ function BookCard({ book, onOpen, onRemove }: { book: Book; onOpen: () => void; 
           <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-3 text-white">
             <BookOpen className="size-7 opacity-80" />
             <span className="line-clamp-3 text-center text-xs font-medium">{book.title}</span>
-            <span className="absolute bottom-1 right-1.5 text-[9px] uppercase opacity-70">{book.format}</span>
+            <span className="absolute right-1.5 bottom-1 text-[9px] uppercase opacity-70">{book.format}</span>
           </div>
         )}
         {book.progress > 0 && (
@@ -100,7 +163,8 @@ function BookCard({ book, onOpen, onRemove }: { book: Book; onOpen: () => void; 
             e.stopPropagation()
             onRemove()
           }}
-          className="absolute right-1 top-1 rounded bg-black/50 p-1 text-white opacity-0 hover:bg-black/70 group-hover:opacity-100"
+          className="absolute top-1 right-1 rounded bg-black/50 p-1 text-white opacity-0 hover:bg-black/70 group-hover:opacity-100"
+          title="从书架移除"
         >
           <Trash2 className="size-3" />
         </span>
@@ -156,7 +220,6 @@ function Reading({ book }: { book: Book }) {
           <ArrowLeft className="size-4" />
         </button>
         <span className="flex-1 truncate text-xs font-medium">{book.title}</span>
-        <span className="text-[11px] text-muted-foreground tabular-nums">{Math.round(progress * 100)}%</span>
         {toc.length > 0 && (
           <button onClick={() => setTocOpen((v) => !v)} className="rounded p-1.5 hover:bg-muted" title="目录">
             <List className="size-4" />
@@ -182,14 +245,14 @@ function Reading({ book }: { book: Book }) {
 
         <button
           onClick={() => viewerRef.current?.prev()}
-          className="absolute left-0 top-0 flex h-full w-12 items-center justify-start pl-1 text-foreground/30 hover:bg-foreground/5 hover:text-foreground/70"
+          className="absolute top-0 left-0 flex h-full w-12 items-center justify-start pl-1 text-foreground/30 hover:bg-foreground/5 hover:text-foreground/70"
           title="上一页 (←)"
         >
           <ChevronLeft className="size-6" />
         </button>
         <button
           onClick={() => viewerRef.current?.next()}
-          className="absolute right-0 top-0 flex h-full w-12 items-center justify-end pr-1 text-foreground/30 hover:bg-foreground/5 hover:text-foreground/70"
+          className="absolute top-0 right-0 flex h-full w-12 items-center justify-end pr-1 text-foreground/30 hover:bg-foreground/5 hover:text-foreground/70"
           title="下一页 (→)"
         >
           <ChevronRight className="size-6" />
@@ -199,7 +262,7 @@ function Reading({ book }: { book: Book }) {
         {tocOpen && (
           <>
             <div className="absolute inset-0 z-10 bg-black/30" onClick={() => setTocOpen(false)} />
-            <div className="absolute left-0 top-0 z-20 h-full w-72 overflow-auto border-r border-border bg-background p-2 shadow-xl">
+            <div className="absolute top-0 left-0 z-20 h-full w-72 overflow-auto border-r border-border bg-background p-2 shadow-xl">
               <p className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">目录</p>
               <TocList
                 items={toc}
@@ -211,6 +274,26 @@ function Reading({ book }: { book: Book }) {
             </div>
           </>
         )}
+      </div>
+
+      {/* 底部可拖动进度条 */}
+      <div className="flex items-center gap-3 border-t border-border px-4 py-2">
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.001}
+          value={progress}
+          onChange={(e) => {
+            const f = Number(e.target.value)
+            setProgress(f)
+            viewerRef.current?.goToFraction(f)
+          }}
+          className="h-1 flex-1 cursor-pointer accent-primary"
+        />
+        <span className="w-10 text-right text-[11px] text-muted-foreground tabular-nums">
+          {Math.round(progress * 100)}%
+        </span>
       </div>
     </div>
   )
@@ -252,9 +335,13 @@ function SettingsPanel({
   return (
     <>
       <div className="fixed inset-0 z-20" onClick={onClose} />
-      <div className="absolute right-0 top-9 z-30 w-60 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl">
+      <div className="absolute top-9 right-0 z-30 w-60 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl">
         <Row label="字号">
-          <Stepper value={`${settings.fontSize}`} onMinus={() => set({ fontSize: Math.max(12, settings.fontSize - 1) })} onPlus={() => set({ fontSize: Math.min(40, settings.fontSize + 1) })} />
+          <Stepper
+            value={`${settings.fontSize}`}
+            onMinus={() => set({ fontSize: Math.max(12, settings.fontSize - 1) })}
+            onPlus={() => set({ fontSize: Math.min(40, settings.fontSize + 1) })}
+          />
         </Row>
         <Row label="行距">
           <Stepper

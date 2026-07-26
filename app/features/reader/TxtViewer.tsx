@@ -30,6 +30,10 @@ const TxtViewer = forwardRef<ViewerHandle, ViewerProps>(function TxtViewer(props
       const frac = typeof t === 'number' ? t : parseFloat(String(t)) || 0
       el.scrollTop = frac * (el.scrollHeight - el.clientHeight)
     },
+    goToFraction: (f) => {
+      const el = scrollRef.current
+      if (el) el.scrollTop = f * (el.scrollHeight - el.clientHeight)
+    },
   }))
 
   useEffect(() => {

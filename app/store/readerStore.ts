@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import type { Book } from '@/lib/conveyor/api/reader-api'
+import { extractMeta } from '@/app/features/reader/cover'
 
 export type Theme = 'light' | 'sepia' | 'dark'
+export type SortKey = 'recent' | 'title' | 'added'
 
 export interface ReaderSettings {
   fontSize: number // px
@@ -19,6 +21,7 @@ const loadSettings = (): ReaderSettings => {
 }
 
 export const FONT_FORMATS = ['epub', 'mobi', 'azw3', 'azw', 'fb2', 'fbz', 'cbz']
+export const SUPPORTED_EXT = [...FONT_FORMATS, 'pdf', 'txt']
 
 export function bookFromPath(path: string): Book {
   const name = path.replace(/\\/g, '/').split('/').pop() || path
@@ -44,7 +47,11 @@ interface ReaderState {
   books: Book[]
   current: Book | null
   settings: ReaderSettings
+  query: string
+  sort: SortKey
+  importing: boolean
   loadBooks: () => Promise<void>
+  addPaths: (paths: string[]) => Promise<void>
   importBooks: () => Promise<void>
   openBook: (b: Book) => void
   closeBook: () => Promise<void>
@@ -52,6 +59,9 @@ interface ReaderState {
   updateMeta: (patch: Partial<Book>) => void
   saveProgress: (fraction: number, location: string) => void
   setSettings: (patch: Partial<ReaderSettings>) => void
+  setQuery: (q: string) => void
+  setSort: (s: SortKey) => void
+  visibleBooks: () => Book[]
 }
 
 const reader = () => window.conveyor.reader
@@ -60,26 +70,43 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   books: [],
   current: null,
   settings: loadSettings(),
+  query: '',
+  sort: 'recent',
+  importing: false,
 
   loadBooks: async () => set({ books: await reader().listBooks() }),
 
-  importBooks: async () => {
-    const paths = await reader().openDialog()
-    if (!paths.length) return
+  addPaths: async (paths) => {
+    const supported = paths.filter((p) => SUPPORTED_EXT.includes((p.split('.').pop() || '').toLowerCase()))
+    if (!supported.length) return
     const existing = get().books
-    let firstNew: Book | null = null
-    for (const p of paths) {
-      const already = existing.find((b) => b.path === p)
-      if (already) {
-        firstNew = firstNew ?? already
-        continue
-      }
+    const newBooks: Book[] = []
+    for (const p of supported) {
+      if (existing.some((b) => b.path === p)) continue
       const book = bookFromPath(p)
       await reader().upsertBook(book)
-      firstNew = firstNew ?? book
+      newBooks.push(book)
     }
     await get().loadBooks()
-    if (firstNew) set({ current: get().books.find((b) => b.id === firstNew!.id) ?? firstNew })
+    const first = newBooks[0] ?? get().books.find((b) => supported.includes(b.path))
+    if (first) set({ current: get().books.find((b) => b.id === first.id) ?? first })
+
+    // 后台提取封面 + 元数据(不阻塞打开)
+    set({ importing: true })
+    for (const b of newBooks) {
+      const meta = await extractMeta(b.path, b.format)
+      if (meta.cover || meta.title || meta.author) {
+        const merged = { ...b, cover: meta.cover || b.cover, title: meta.title || b.title, author: meta.author || b.author }
+        await reader().upsertBook(merged)
+      }
+    }
+    set({ importing: false })
+    await get().loadBooks()
+  },
+
+  importBooks: async () => {
+    const paths = await reader().openDialog()
+    await get().addPaths(paths)
   },
 
   openBook: (b) => set({ current: b }),
@@ -100,6 +127,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     const next = { ...cur, ...patch }
     set({ current: next })
     reader().upsertBook(next)
+    set({ books: get().books.map((b) => (b.id === next.id ? { ...b, ...patch } : b)) })
   },
 
   saveProgress: (fraction, location) => {
@@ -113,5 +141,21 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     const next = { ...get().settings, ...patch }
     set({ settings: next })
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(next))
+  },
+
+  setQuery: (q) => set({ query: q }),
+  setSort: (s) => set({ sort: s }),
+
+  visibleBooks: () => {
+    const { books, query, sort } = get()
+    const q = query.trim().toLowerCase()
+    const filtered = q
+      ? books.filter((b) => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q))
+      : books
+    const sorted = [...filtered]
+    if (sort === 'title') sorted.sort((a, b) => a.title.localeCompare(b.title, 'zh'))
+    else if (sort === 'added') sorted.sort((a, b) => b.addedAt - a.addedAt)
+    else sorted.sort((a, b) => b.lastReadAt - a.lastReadAt)
+    return sorted
   },
 }))

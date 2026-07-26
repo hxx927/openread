@@ -6,15 +6,21 @@ import { registerWindowHandlers } from '@/lib/conveyor/handlers/window-handler'
 import { registerAppHandlers } from '@/lib/conveyor/handlers/app-handler'
 import { registerNativeHandlers, unregisterNativeShortcuts } from '@/lib/conveyor/handlers/native-handler'
 import { registerReaderHandlers } from '@/lib/conveyor/handlers/reader-handler'
+import { loadBounds, trackBounds } from './window-state'
 
 export function createAppWindow(): void {
   // Register custom protocol for resources
   registerResourcesProtocol()
 
+  // 恢复上次窗口尺寸/位置
+  const saved = loadBounds()
+
   // Create the main window.
   const mainWindow = new BrowserWindow({
-    width: 1160,
-    height: 780,
+    width: saved?.width ?? 1160,
+    height: saved?.height ?? 780,
+    x: saved?.x,
+    y: saved?.y,
     minWidth: 800,
     minHeight: 560,
     show: false,
@@ -38,6 +44,9 @@ export function createAppWindow(): void {
   registerAppHandlers(app)
   registerNativeHandlers(mainWindow)
   registerReaderHandlers(mainWindow)
+
+  if (saved?.maximized) mainWindow.maximize()
+  trackBounds(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()

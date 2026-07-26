@@ -36,6 +36,7 @@ const FoliateViewer = forwardRef<ViewerHandle, ViewerProps>(function FoliateView
     prev: () => viewRef.current?.goLeft(),
     next: () => viewRef.current?.goRight(),
     goTo: (t) => viewRef.current?.goTo(t),
+    goToFraction: (f) => viewRef.current?.goToFraction?.(f),
   }))
 
   // 打开书籍(仅在文件变化时)
@@ -76,9 +77,6 @@ const FoliateViewer = forwardRef<ViewerHandle, ViewerProps>(function FoliateView
       const book = view.book
       onMeta?.({ title: firstOf(book?.metadata?.title) || undefined, author: fmtAuthor(book?.metadata?.author) })
       onToc?.((book?.toc as TocItem[]) ?? [])
-      Promise.resolve(book?.getCover?.()).then((blob: Blob | null) => {
-        if (blob && !cancelled) onMeta?.({ cover: URL.createObjectURL(blob) })
-      })
     })().catch((err) => console.error('[reader] open failed:', err))
 
     return () => {

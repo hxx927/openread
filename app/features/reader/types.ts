@@ -2,6 +2,7 @@ export interface ViewerHandle {
   prev: () => void
   next: () => void
   goTo: (target: string | number) => void
+  goToFraction: (fraction: number) => void
 }
 
 export interface TocItem {

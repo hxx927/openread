@@ -53,6 +53,10 @@ const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewer(props
       pageRef.current = Math.min(Math.max(1, n), numRef.current)
       render()
     },
+    goToFraction: (f) => {
+      pageRef.current = Math.min(Math.max(1, Math.round(f * numRef.current) || 1), numRef.current)
+      render()
+    },
   }))
 
   useEffect(() => {
