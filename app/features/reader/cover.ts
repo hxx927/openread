@@ -1,7 +1,5 @@
 import PdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 const blobToDataURL = (blob: Blob) =>
   new Promise<string>((resolve) => {
     const r = new FileReader()

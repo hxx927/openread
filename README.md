@@ -2,37 +2,41 @@
 
 > 一个 **网页浏览 + 本地电子书阅读** 二合一的桌面工具。灵感来自「墨鱼阅读」,但**完全用开源组件从零实现**,不含任何闭源代码,MIT 开源。
 
-<p align="center"><i>多格式电子书阅读器 · 站点导航浏览器 · AI 网站聚合 · 透明摸鱼 / 自动隐藏 / 托盘 / 老板键 / 防截图 / 密码锁</i></p>
+<p align="center"><i>多格式电子书阅读器 · 网络书源 · 站点导航浏览器 · 透明摸鱼 / 自动隐藏 / 托盘 / 老板键 / 防截图 / 密码锁</i></p>
 
 ---
 
 ## ✨ 功能
 
 ### 📚 本地阅读器
+
 - **格式**:EPUB / MOBI / AZW3 / FB2 / CBZ(foliate-js)、PDF(pdf.js)、TXT(自动识别 UTF-8 / GB18030)
 - 书架(导入时自动提取**封面**、标题、作者)、**拖拽导入**、搜索、排序(最近阅读 / 标题 / 导入时间)
 - 阅读进度记忆、目录跳转、**可拖动进度条**、字号 / 行距 / 主题(明亮 / 护眼 / 暗黑)
 
-### ☁️ 网络书源(自定义 JS 书源)
-- **导入书源 → 跨源搜索 → 看目录 → 读正文**,全在应用内完成
-- 支持两种书源:**纯 JS 书源**(`.js`/`.txt`)与 **轻悦时光书源**(`.json`,外壳里 `html` 字段装整页脚本)
-- 导入方式:**本地文件 / 粘贴代码 / 粘贴链接**
-- 书源就是一段 **JS 脚本**(不是复杂规则 DSL),实现 `search / info / chapter / content` 即可
-- 内置 `flutter_inappwebview.callHandler` 兼容桥,轻悦时光书源自带的 `Http`/`Cache` 类可直接工作
-- 运行时注入 `Http`(主进程代发,免跨域、自动处理 GBK/GB18030)、`Cache`、`Cookie`、`parseHTMLSafely`、jQuery、CryptoJS
-- **安全**:书源跑在隔离的沙箱 webview 里(独立 partition、contextIsolation),拿不到本机文件与应用 IPC
-- 附示例书源 [`sample/书源示例-维基文库.js`](./sample/书源示例-维基文库.js)(基于公有领域的中文维基文库)
+### ☁️ 网络书源(自定义 JS / 轻悦时光书源)
 
-> ⚠️ 书源功能是**中立工具**,内容由你自行导入的书源提供;请使用**合法、已授权**的来源。本项目不内置任何盗版书源。
+- **搜索 / 发现 / 书源管理**三种模式:跨源搜索、榜单/分类发现、目录与正文阅读
+- 支持两种书源:**纯 JS 书源**(`.js`/`.txt`)与 **轻悦时光书源**(`.json`,外壳里 `html` 字段装整页脚本)
+- 导入方式:**本地文件 / 粘贴代码 / 粘贴链接**;代码及类型完全相同的重复书源会合并
+- 基本函数:`search(key,page)`、`info(bookUrl)`、`chapter(tocUrl,bookUrl)`、`content(url,bookUrl)`
+- 发现协议:`getfinds()` 返回分类/榜单入口,`find(url,page)` 返回书籍列表;支持分组、翻页和封面网格
+- 登录协议:`getloginurl()` + `login()`;支持加密表单凭据与独立网页登录窗口
+- 每个书源使用独立持久 Cookie 分区;支持时表单凭据由 Electron `safeStorage` 加密保存，否则只保留在本次运行中
+- 管理能力:启用开关、编辑、置顶/置底、登录、单源搜索、发现、函数调试、删除
+- 运行时注入 `Http`(主进程代发,免跨域、自动处理 GBK/GB18030)、真实 `Cookie`、`Cache`、jQuery、CryptoJS
+- **安全**:书源跑在隔离沙箱 webview;网页登录页拿不到 Node/应用 IPC;不提供付费绕过、密钥代取或验证码绕过
+- 附示例书源 [`sample/书源示例-维基文库.js`](./sample/书源示例-维基文库.js)(公有领域/自由许可内容)
+
+> ⚠️ 书源功能是**中立工具**,内容与账号由你自行导入/登录的来源提供;请只使用合法、已授权的来源。
 
 ### 🌐 内嵌浏览器(导航启动页)
+
 - 打开即**站点导航页**:搜索框 + 分类推荐(小说 / 视频 / 备考 / 财经 / AI)+ **我的站点**(自己添加,点即进)
 - 多标签 `<webview>`、地址栏、前进 / 后退 / 刷新;各站登录状态持久保留
 
-### 🤖 AI 面板
-- 内嵌豆包 / DeepSeek / Kimi / 元宝 / 智谱官方网站(登录即用,**不代理、不经手任何 API Key**)
-
 ### 🫥 摸鱼 / 隐蔽(纯 Electron 原生能力)
+
 - **透明摸鱼**:抠掉网页背景,只剩正文浮在桌面上;隐藏全部界面 / 标题栏,不暴露(Esc 退出)
 - **自动隐藏**:鼠标移出窗口即隐、移回再现;点击别的窗口则锁定隐藏,只能从托盘 / 老板键唤回
 - **常驻系统托盘图标**(左键显隐、右键菜单)
@@ -42,6 +46,7 @@
 ## 🚀 下载使用
 
 到 [Releases](../../releases) 下载最新版:
+
 - `openread-x.y.z-setup.exe`(安装版)或 `openread-x.y.z-portable.exe`(免安装便携版)
 
 > Windows 托盘图标默认被系统收进"隐藏图标"里,点任务栏时钟旁的 `^` 展开即可,可拖出常驻。
@@ -74,22 +79,25 @@ lib/
     autohide.ts         自动隐藏(离屏 peek + 失焦锁定)
     lock.ts             密码锁(scrypt + safeStorage)
     library.ts          书库(JSON 存储)
+    sources.ts          书源存储、去重/编辑/排序与每源 HTTP 会话
+    source-session.ts   每源 Cookie 隔离 + safeStorage 加密登录凭据
     window-state.ts     记忆窗口尺寸/位置
   conveyor/             类型安全 IPC(schemas / handlers / api)
     ├ window / app      窗口控制 / 系统
     ├ native            摸鱼:透明·置顶·防截图·老板键·自动隐藏
     ├ reader            阅读:文件对话框 / 读取 / 书库
     ├ browser           浏览器:弹窗转标签
+    ├ source            书源管理 / Cookie / 登录 / HTTP
     └ lock              密码锁
 app/
-  Shell.tsx             侧栏 + 三视图外壳
+  Shell.tsx             侧栏 + 书架/书源/浏览视图外壳
   features/
     reader/             foliate / pdf / txt 三个 viewer + 书架 + 封面提取 + 阅读设置
+    source/             搜索 / 发现 / 登录 / 管理 + 隔离书源运行时
     browser/            导航启动页(NavHome)+ 多标签 <webview> + 透明摸鱼
-    ai/                 AI 网站聚合
     native/             摸鱼工具条
     lock/               锁屏 + 密码锁设置
-  store/                zustand:browserStore / readerStore / stealthStore / lockStore
+  store/                zustand:browserStore / readerStore / sourceStore / stealthStore / lockStore
 ```
 
 ## 📄 许可 & 声明

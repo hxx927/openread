@@ -22,7 +22,7 @@ interface Chapter {
 
 /** 识别章节标题行(第X章/卷/节/回、序章、楔子、番外…),把 TXT 切成章节 */
 const CHAP_RE =
-  /^[ \t　]*(第\s*[0-9零〇一二三四五六七八九十百千两]+\s*[章回节卷部篇集]|序章|序言|序|楔子|引子|前言|尾声|后记|番外[篇章]?|终章)[^\n]{0,30}$/
+  /^(?:\t|\x20|\u{3000})*(第\s*[0-9零〇一二三四五六七八九十百千两]+\s*[章回节卷部篇集]|序章|序言|序|楔子|引子|前言|尾声|后记|番外[篇章]?|终章)[^\n]{0,30}$/u
 
 function parseChapters(text: string): Chapter[] {
   const lines = text.split(/\r?\n/)
@@ -124,7 +124,13 @@ const TxtViewer = forwardRef<ViewerHandle, ViewerProps>(function TxtViewer(props
         style={{ color: fg, fontSize: `${fontSize}px`, lineHeight, fontFamily: fontFamily || undefined }}
       >
         {chapters.map((c, i) => (
-          <div key={i} ref={(el) => (chapRefs.current[i] = el)} className="scroll-mt-4">
+          <div
+            key={i}
+            ref={(el) => {
+              chapRefs.current[i] = el
+            }}
+            className="scroll-mt-4"
+          >
             {chapters.length > 1 && <h3 className="mb-4 text-center text-lg font-semibold">{c.title}</h3>}
             <div className="whitespace-pre-wrap">{c.body}</div>
           </div>

@@ -100,7 +100,7 @@ function BrowserTab({ tab, transparent }: { tab: Tab; transparent: boolean }) {
       ref={ref as unknown as React.Ref<HTMLElement>}
       src={initialUrl.current}
       partition={PARTITION}
-      allowpopups={'true'}
+      allowpopups
       className="h-full w-full"
       style={{ background: 'transparent' }}
     />
@@ -124,7 +124,10 @@ export default function BrowserView() {
   useEffect(() => {
     if (!autoScroll) return
     const id = setInterval(() => {
-      webviewRegistry.get(activeId ?? undefined)?.executeJavaScript('window.scrollBy(0,1)').catch(() => {})
+      webviewRegistry
+        .get(activeId ?? undefined)
+        ?.executeJavaScript('window.scrollBy(0,1)')
+        .catch(() => {})
     }, 60)
     return () => clearInterval(id)
   }, [autoScroll, activeId])
@@ -175,7 +178,11 @@ export default function BrowserView() {
                 </button>
               ))}
             </div>
-            <button onClick={() => newTab()} className="mb-1 rounded p-1 text-muted-foreground hover:bg-muted" title="新标签页">
+            <button
+              onClick={() => newTab()}
+              className="mb-1 rounded p-1 text-muted-foreground hover:bg-muted"
+              title="新标签页"
+            >
               <Plus className="size-4" />
             </button>
           </div>
@@ -221,7 +228,9 @@ export default function BrowserView() {
       )}
 
       {/* 内容区:位置固定,切换透明不重建 webview */}
-      <div className={cn('relative flex-1', activeIsHome ? 'bg-background' : transparent ? 'bg-transparent' : 'bg-white')}>
+      <div
+        className={cn('relative flex-1', activeIsHome ? 'bg-background' : transparent ? 'bg-transparent' : 'bg-white')}
+      >
         {tabs
           .filter((t) => t.url)
           .map((t) => (

@@ -3,8 +3,6 @@ import jquerySrc from './vendor/jquery.min.js?raw'
 import cryptoSrc from './vendor/crypto-js.js?raw'
 import type { WebviewElement } from '@/app/types/webview'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 /**
  * 书源运行时(qysg / 轻悦时光 风格)。
  * 书源就是一段 JS,实现 search/info/chapter/content 等异步函数;
@@ -17,6 +15,7 @@ const BOOTSTRAP = `
 (() => {
   const H = window.__sourceHost
   const enc = (o) => (o && typeof o === 'object' ? o : undefined)
+  const sourceToasts = []
 
   class Http {
     async Get(url, headers, followRedirects) {
@@ -33,29 +32,20 @@ const BOOTSTRAP = `
   }
   window.Http = Http
 
+  const isLoginInfo = (key) => String(key) === 'LoginInfo'
   window.Cache = {
-    get: (k) => H.cacheGet(String(k)),
-    set: (k, v) => H.cacheSet(String(k), String(v)),
-    remove: (k) => H.cacheRemove(String(k)),
+    get: (k) => isLoginInfo(k) ? H.authGet() : H.cacheGet(String(k)),
+    set: (k, v) => isLoginInfo(k) ? H.authSet(String(v)) : H.cacheSet(String(k), String(v)),
+    remove: (k) => isLoginInfo(k) ? H.authClear() : H.cacheRemove(String(k)),
   }
 
-  // Cookie:实际请求的 cookie 由主进程 session 自动管理,这里提供书源可读写的存储位
-  const ck = (u) => 'cookie:' + String(u)
+  // Cookie:每个书源绑定真实 Electron session cookie jar
   window.Cookie = {
-    get: (u) => H.cacheGet(ck(u)),
-    set: (u, v) => H.cacheSet(ck(u), String(v)),
-    remove: (u) => H.cacheRemove(ck(u)),
-    async setCookie(u, key, value) {
-      const cur = (await H.cacheGet(ck(u))) || ''
-      const parts = cur.split(';').map(s => s.trim()).filter(s => s && s.split('=')[0] !== key)
-      parts.push(key + '=' + value)
-      return H.cacheSet(ck(u), parts.join('; '))
-    },
-    async getCookie(u, key) {
-      const cur = (await H.cacheGet(ck(u))) || ''
-      const hit = cur.split(';').map(s => s.trim()).find(s => s.split('=')[0] === key)
-      return hit ? hit.slice(hit.indexOf('=') + 1) : ''
-    },
+    get: (u) => H.cookieGet(String(u)),
+    set: (u, v) => H.cookieSet(String(u), String(v)),
+    remove: (u) => H.cookieRemove(String(u)),
+    setCookie: (u, key, value) => H.cookieSetOne(String(u), String(key), String(value)),
+    getCookie: (u, key) => H.cookieGetOne(String(u), String(key)),
   }
 
   // 解析工具
@@ -82,13 +72,18 @@ const BOOTSTRAP = `
             url: String(url),
             method: String(method || 'get').toUpperCase(),
             headers,
-            body: body ? String(body) : undefined,
+            body: body == null ? undefined : String(body),
             followRedirects: followRedirects !== false,
           })
         }
-        case 'cache.get': return await H.cacheGet(String(a[0]))
-        case 'cache.set': return await H.cacheSet(String(a[0]), String(a[1]))
-        case 'cache.remove': return await H.cacheRemove(String(a[0]))
+        case 'cache.get': return isLoginInfo(a[0]) ? await H.authGet() : await H.cacheGet(String(a[0]))
+        case 'cache.set': return isLoginInfo(a[0]) ? await H.authSet(String(a[1])) : await H.cacheSet(String(a[0]), String(a[1]))
+        case 'cache.remove': return isLoginInfo(a[0]) ? await H.authClear() : await H.cacheRemove(String(a[0]))
+        case 'cookie.get': return await H.cookieGet(String(a[0]))
+        case 'cookie.getCookie': return await H.cookieGetOne(String(a[0]), String(a[1]))
+        case 'cookie.set': return await H.cookieSet(String(a[0]), String(a[1]))
+        case 'cookie.setcookie': return await H.cookieSetOne(String(a[0]), String(a[1]), String(a[2]))
+        case 'cookie.remove': return await H.cookieRemove(String(a[0]))
 
         case 'base64encode': return window.base64Encode(a[0])
         case 'base64decode': return window.base64Decode(a[0])
@@ -100,13 +95,20 @@ const BOOTSTRAP = `
         case 'id': return 'openread'
         case 'CookieJar': return true
         case 'getdurChapterIndex': return 0
-        case 'getLoginUser': return ''
+        case 'getLoginUser': return await H.authGet()
         case 'toTraditional': case 'toSimplified': return a[0]
         case 'log': console.log('[书源]', ...a); return true
-        case 'showToast': console.log('[书源提示]', ...a); return true
-        // 以下能力当前未实现(需要宿主 UI 配合),返回空值让书源走降级分支
+        case 'showToast': {
+          const text = a.map(v => { try { return typeof v === 'string' ? v : JSON.stringify(v) } catch (e) { return String(v) } }).join(' ').trim().slice(0, 500)
+          if (text && sourceToasts.length < 10) sourceToasts.push(text)
+          return true
+        }
         case 'webview': case 'webviewajax': case 'openurl': case 'startBrowser':
-        case 'startBrowserWithShouldOverrideUrlLoading': case 'startBrowserDp':
+        case 'startBrowserWithShouldOverrideUrlLoading': case 'startBrowserDp': {
+          const target = a.find(v => typeof v === 'string' && /^https?:\\/\\//i.test(v))
+          return target ? H.openLogin(target) : null
+        }
+        // 以下能力需要更具体的宿主交互,保留兼容降级,但不做付费/验证码绕过
         case 'back': case 'getVerificationCode': case 'addbook': case 'voice': case 'text':
         case 'utf8ToGbkUrlEncoded':
           console.log('[书源] 未实现的宿主能力:', name)
@@ -120,13 +122,14 @@ const BOOTSTRAP = `
 
   // 统一调用入口:返回 JSON 字符串(executeJavaScript 只能回传可序列化值)
   window.__call = async (fn, args) => {
+    sourceToasts.length = 0
     try {
       const f = window[fn]
-      if (typeof f !== 'function') return JSON.stringify({ ok: false, error: '书源未实现 ' + fn + '()' })
+      if (typeof f !== 'function') return JSON.stringify({ ok: false, error: '书源未实现 ' + fn + '()', toasts: [] })
       const r = await f.apply(window, args || [])
-      return JSON.stringify({ ok: true, data: r === undefined ? null : r })
+      return JSON.stringify({ ok: true, data: r === undefined ? null : r, toasts: sourceToasts.splice(0) })
     } catch (e) {
-      return JSON.stringify({ ok: false, error: String((e && (e.stack || e.message)) || e) })
+      return JSON.stringify({ ok: false, error: String((e && (e.stack || e.message)) || e), toasts: sourceToasts.splice(0) })
     }
   }
   window.__ready = true
@@ -169,6 +172,41 @@ export interface SourceChapter {
   isVolume?: boolean
 }
 
+export interface SourceFindItem {
+  title: string
+  url: string
+  width?: number
+}
+
+export interface SourceLoginField {
+  name: string
+  type: string
+  value?: string
+  action?: string
+  url?: string
+  placeholder?: string
+  [key: string]: unknown
+}
+
+export type SourceFunctionName =
+  'search' | 'info' | 'chapter' | 'content' | 'getfinds' | 'find' | 'getloginurl' | 'login'
+
+export interface SourceToast {
+  sourceId: string
+  message: string
+}
+
+const toastListeners = new Set<(toast: SourceToast) => void>()
+
+export function subscribeSourceToasts(listener: (toast: SourceToast) => void): () => void {
+  toastListeners.add(listener)
+  return () => toastListeners.delete(listener)
+}
+
+function emitSourceToast(toast: SourceToast): void {
+  for (const listener of toastListeners) listener(toast)
+}
+
 /** 从整页 HTML 里抽出内联 <script> 代码(跳过带 src 的外链脚本) */
 function extractScripts(html: string): string[] {
   const out: string[] = []
@@ -184,66 +222,120 @@ function extractScripts(html: string): string[] {
 class SourceRuntime {
   private wv: WebviewElement | null = null
   private booting: Promise<void> | null = null
+  private generation = 0
 
   constructor(
+    private sourceId: string,
     private code: string,
     private kind: 'js' | 'html' = 'js'
   ) {}
 
   private boot(): Promise<void> {
     if (this.booting) return this.booting
-    this.booting = (async () => {
-      const preload = await window.conveyor.source.runtimePreload()
-      const wv = document.createElement('webview') as unknown as WebviewElement
-      wv.setAttribute('src', 'about:blank')
-      wv.setAttribute('partition', 'persist:openread-source')
-      wv.setAttribute('preload', preload)
-      // 离屏但仍然渲染(display:none 会导致 webview 不初始化)
-      const style = wv.style as CSSStyleDeclaration
-      style.position = 'fixed'
-      style.width = '400px'
-      style.height = '300px'
-      style.left = '-10000px'
-      style.top = '0'
-      style.opacity = '0'
-      style.pointerEvents = 'none'
-      document.body.appendChild(wv)
-      this.wv = wv
-
-      await new Promise<void>((resolve, reject) => {
-        const t = setTimeout(() => reject(new Error('书源运行时启动超时')), 15000)
-        wv.addEventListener('dom-ready', () => {
-          clearTimeout(t)
-          resolve()
-        })
+    let timer = 0
+    const timeout = new Promise<never>((_, reject) => {
+      timer = window.setTimeout(() => reject(new Error('书源运行时启动超时')), 30000)
+    })
+    this.booting = Promise.race([this.start(this.generation), timeout])
+      .finally(() => window.clearTimeout(timer))
+      .catch((error) => {
+        this.destroy()
+        throw error
       })
-
-      await wv.executeJavaScript(jquerySrc)
-      await wv.executeJavaScript(cryptoSrc)
-      await wv.executeJavaScript(BOOTSTRAP)
-
-      // 书源本体:纯 JS 直接注入;轻悦时光书源(整页 HTML)则抽出内联 script 依次注入
-      if (this.kind === 'html') {
-        const scripts = extractScripts(this.code)
-        if (!scripts.length) throw new Error('书源 HTML 中没有找到可执行脚本')
-        for (const s of scripts) await wv.executeJavaScript(s)
-      } else {
-        await wv.executeJavaScript(this.code)
-      }
-    })()
     return this.booting
+  }
+
+  private async start(generation: number): Promise<void> {
+    const preload = await window.conveyor.source.runtimePreload()
+    if (generation !== this.generation) throw new Error('书源运行时启动已取消')
+    const wv = document.createElement('webview') as unknown as WebviewElement
+    wv.setAttribute('src', `about:blank#sourceId=${encodeURIComponent(this.sourceId)}`)
+    wv.setAttribute('partition', `openread-source-runtime-${this.sourceId}`)
+    wv.setAttribute('preload', preload)
+    // 离屏但仍然渲染(display:none 会导致 webview 不初始化)
+    const style = wv.style as CSSStyleDeclaration
+    style.position = 'fixed'
+    style.width = '400px'
+    style.height = '300px'
+    style.left = '-10000px'
+    style.top = '0'
+    style.opacity = '0'
+    style.pointerEvents = 'none'
+    document.body.appendChild(wv)
+    this.wv = wv
+
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('书源运行时启动超时')), 15000)
+      wv.addEventListener('dom-ready', () => {
+        clearTimeout(t)
+        resolve()
+      })
+    })
+
+    await wv.executeJavaScript(jquerySrc)
+    await wv.executeJavaScript(cryptoSrc)
+    await wv.executeJavaScript(BOOTSTRAP)
+
+    // 书源本体:纯 JS 直接注入;轻悦时光书源(整页 HTML)则抽出内联 script 依次注入
+    if (this.kind === 'html') {
+      const scripts = extractScripts(this.code)
+      if (!scripts.length) throw new Error('书源 HTML 中没有找到可执行脚本')
+      for (const s of scripts) await wv.executeJavaScript(s)
+    } else {
+      await wv.executeJavaScript(this.code)
+    }
+  }
+
+  private async execute<T>(code: string, timeoutMessage: string): Promise<T> {
+    if (!this.wv) throw new Error('书源运行时不可用')
+    const execution = this.wv.executeJavaScript(code)
+    let timer = 0
+    const timeout = new Promise<never>((_, reject) => {
+      timer = window.setTimeout(() => reject(new Error(timeoutMessage)), 30000)
+    })
+    try {
+      return (await Promise.race([execution, timeout])) as T
+    } catch (error) {
+      this.destroy()
+      throw error
+    } finally {
+      window.clearTimeout(timer)
+    }
   }
 
   async call<T = any>(fn: string, args: any[] = []): Promise<T> {
     await this.boot()
-    if (!this.wv) throw new Error('书源运行时不可用')
-    const raw = await this.wv.executeJavaScript(`__call(${JSON.stringify(fn)}, ${JSON.stringify(args)})`)
-    const res = JSON.parse(String(raw)) as { ok: boolean; data?: any; error?: string }
+    const raw = await this.execute<unknown>(
+      `__call(${JSON.stringify(fn)}, ${JSON.stringify(args)})`,
+      `书源调用超时: ${fn}`
+    )
+    const res = JSON.parse(String(raw)) as {
+      ok: boolean
+      data?: any
+      error?: string
+      toasts?: unknown[]
+    }
+    for (const toast of res.toasts ?? []) {
+      const message = String(toast ?? '')
+        .trim()
+        .slice(0, 500)
+      if (message) emitSourceToast({ sourceId: this.sourceId, message })
+    }
     if (!res.ok) throw new Error(res.error || '书源执行失败')
     return coerce<T>(res.data)
   }
 
+  async has(fn: string): Promise<boolean> {
+    await this.boot()
+    return Boolean(await this.execute(`typeof window[${JSON.stringify(fn)}] === 'function'`, `书源函数检测超时: ${fn}`))
+  }
+
+  matches(source: SourceRef): boolean {
+    return this.sourceId === source.id && this.code === source.code && this.kind === (source.kind ?? 'js')
+  }
+
   destroy(): void {
+    this.generation++
     try {
       this.wv?.remove()
     } catch {
@@ -265,8 +357,13 @@ export interface SourceRef {
 
 function runtimeFor(s: SourceRef): SourceRuntime {
   let rt = runtimes.get(s.id)
+  if (rt && !rt.matches(s)) {
+    rt.destroy()
+    runtimes.delete(s.id)
+    rt = undefined
+  }
   if (!rt) {
-    rt = new SourceRuntime(s.code, s.kind ?? 'js')
+    rt = new SourceRuntime(s.id, s.code, s.kind ?? 'js')
     runtimes.set(s.id, rt)
   }
   return rt
@@ -296,4 +393,53 @@ export const sourceEngine = {
     runtimeFor(s).call<SourceChapter[]>('chapter', [tocUrl, bookUrl ?? tocUrl]),
   content: (s: SourceRef, chapterId: string, bookUrl?: string) =>
     runtimeFor(s).call<string>('content', [chapterId, bookUrl ?? '']),
+
+  async getFinds(s: SourceRef): Promise<SourceFindItem[]> {
+    const runtime = runtimeFor(s)
+    if (!(await runtime.has('getfinds'))) return []
+    const items = coerce<SourceFindItem[]>(await runtime.call('getfinds'))
+    return (Array.isArray(items) ? items : []).map((item) => ({
+      title: String(item.title ?? ''),
+      url: String(item.url ?? ''),
+      width: Number(item.width ?? 1),
+    }))
+  },
+
+  find: (s: SourceRef, url: string, page = 1) => runtimeFor(s).call<SourceBook[]>('find', [url, page]),
+
+  async getLoginFields(s: SourceRef): Promise<SourceLoginField[] | string> {
+    const runtime = runtimeFor(s)
+    if (!(await runtime.has('getloginurl'))) return []
+    const value = coerce<SourceLoginField[] | string>(await runtime.call('getloginurl'))
+    return value
+  },
+
+  async submitLogin(s: SourceRef, info: Record<string, string>): Promise<unknown> {
+    const runtime = runtimeFor(s)
+    if (!(await runtime.has('login'))) throw new Error('该书源未实现 login()')
+    await window.conveyor.source.authSet(s.id, JSON.stringify(info))
+    return runtime.call('login')
+  },
+
+  async runAction(s: SourceRef, action: string): Promise<unknown> {
+    const match = /^\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*$/.exec(action)
+    if (!match) throw new Error('拒绝执行不安全的登录动作')
+    return runtimeFor(s).call(match[1])
+  },
+
+  async inspect(s: SourceRef): Promise<Record<SourceFunctionName, boolean>> {
+    const names: SourceFunctionName[] = [
+      'search',
+      'info',
+      'chapter',
+      'content',
+      'getfinds',
+      'find',
+      'getloginurl',
+      'login',
+    ]
+    const runtime = runtimeFor(s)
+    const entries = await Promise.all(names.map(async (name) => [name, await runtime.has(name)] as const))
+    return Object.fromEntries(entries) as Record<SourceFunctionName, boolean>
+  },
 }

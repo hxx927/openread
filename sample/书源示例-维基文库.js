@@ -7,8 +7,14 @@
 // 一个书源就是一段 JS,实现下面这几个异步函数即可:
 //   search(key, page)  搜索      -> 书籍数组
 //   info(bookUrl)      详情      -> 单本书籍(可选;至少给出 tocUrl)
-//   chapter(tocUrl)    目录      -> 章节数组
-//   content(url)       正文      -> 文本字符串
+//   chapter(tocUrl, bookUrl) 目录 -> 章节数组
+//   content(url, bookUrl)     正文 -> 文本字符串
+//
+// 可选扩展:
+//   getfinds()          发现分类/榜单 -> [{title,url,width}]
+//   find(url, page)     发现列表     -> 书籍数组
+//   getloginurl()       登录配置     -> 表单字段数组或网页登录 URL
+//   login()             提交登录信息
 //
 // 运行时会注入这些工具:
 //   Http(Get/Post/Head)、Cache、Cookie、parseHTMLSafely、removeHTMLTags、$(jQuery)、CryptoJS
@@ -49,9 +55,12 @@ async function info(bookUrl) {
 }
 
 /** 目录:先找子页面(多章作品),没有就当作单篇全文 */
-async function chapter(tocUrl) {
+async function chapter(tocUrl, _bookUrl) {
   const url =
-    API + '?action=query&list=allpages&apprefix=' + encodeURIComponent(tocUrl + '/') + '&aplimit=500&format=json&origin=*'
+    API +
+    '?action=query&list=allpages&apprefix=' +
+    encodeURIComponent(tocUrl + '/') +
+    '&aplimit=500&format=json&origin=*'
   const j = await getJSON(url)
   const pages = (j.query && j.query.allpages) || []
   if (pages.length > 0) {
@@ -66,14 +75,16 @@ async function chapter(tocUrl) {
 }
 
 /** 正文:取页面 HTML,清成纯文本 */
-async function content(url) {
+async function content(url, _bookUrl) {
   const api = API + '?action=parse&page=' + encodeURIComponent(url) + '&prop=text&format=json&origin=*'
   const j = await getJSON(api)
   const html = (j.parse && j.parse.text && j.parse.text['*']) || ''
   const doc = parseHTMLSafely(html)
 
   // 去掉编辑链接、目录框、参考等杂项
-  doc.querySelectorAll('.mw-editsection, #toc, .toc, .reference, .navbox, table, style, script').forEach((el) => el.remove())
+  doc
+    .querySelectorAll('.mw-editsection, #toc, .toc, .reference, .navbox, table, style, script')
+    .forEach((el) => el.remove())
 
   const parts = []
   doc.querySelectorAll('p, h2, h3, blockquote, li').forEach((el) => {

@@ -1,8 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { THEME_COLORS, type TocItem, type ViewerHandle, type ViewerProps } from './types'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 function readerCSS({
   fontSize,
   lineHeight,
@@ -10,7 +8,9 @@ function readerCSS({
   fontFamily,
 }: Pick<ViewerProps, 'fontSize' | 'lineHeight' | 'theme' | 'fontFamily'>) {
   const { bg, fg } = THEME_COLORS[theme]
-  const family = fontFamily ? `html, body, p, li, blockquote, dd, div, span { font-family: ${fontFamily} !important; }` : ''
+  const family = fontFamily
+    ? `html, body, p, li, blockquote, dd, div, span { font-family: ${fontFamily} !important; }`
+    : ''
   return `
     @namespace epub "http://www.idpf.org/2007/ops";
     html { color-scheme: ${theme === 'dark' ? 'dark' : 'light'}; background: ${bg}; color: ${fg}; font-size: ${fontSize}px; }
@@ -50,16 +50,17 @@ const FoliateViewer = forwardRef<ViewerHandle, ViewerProps>(function FoliateView
   useEffect(() => {
     let cancelled = false
     let view: any
+    const container = containerRef.current
     ;(async () => {
       await import('foliate-js/view.js') // 注册 <foliate-view> 自定义元素
       const { name, bytes } = await window.conveyor.reader.readFile(path)
-      if (cancelled || !containerRef.current) return
+      if (cancelled || !container) return
       const file = new File([bytes], name)
 
       view = document.createElement('foliate-view') as any
       viewRef.current = view
-      containerRef.current.innerHTML = ''
-      containerRef.current.appendChild(view)
+      container.innerHTML = ''
+      container.appendChild(view)
 
       view.addEventListener('relocate', (e: any) => {
         const d = e.detail || {}
@@ -94,7 +95,7 @@ const FoliateViewer = forwardRef<ViewerHandle, ViewerProps>(function FoliateView
       } catch {
         /* noop */
       }
-      if (containerRef.current) containerRef.current.innerHTML = ''
+      if (container) container.innerHTML = ''
       viewRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

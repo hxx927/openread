@@ -1,4 +1,4 @@
-import { BrowserWindow, shell, app } from 'electron'
+import { BrowserWindow, shell, app, session } from 'electron'
 import { join } from 'path'
 import appIcon from '@/resources/build/icon.png?asset'
 import { registerResourcesProtocol } from './protocols'
@@ -10,6 +10,23 @@ import { registerLockHandlers } from '@/lib/conveyor/handlers/lock-handler'
 import { registerSourceHandlers } from '@/lib/conveyor/handlers/source-handler'
 import { loadBounds, trackBounds } from './window-state'
 import { createTray, destroyTray } from './tray'
+import { sourceRuntimePartition } from './source-session'
+
+const hardenedRuntimePartitions = new Set<string>()
+
+function hardenSourceRuntimeSession(sourceId: string): string {
+  const partition = sourceRuntimePartition(sourceId)
+  if (hardenedRuntimePartitions.has(partition)) return partition
+  hardenedRuntimePartitions.add(partition)
+  const runtimeSession = session.fromPartition(partition)
+  runtimeSession.setPermissionCheckHandler(() => false)
+  runtimeSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+  runtimeSession.setDevicePermissionHandler(() => false)
+  runtimeSession.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (_details, callback) =>
+    callback({ cancel: true })
+  )
+  return partition
+}
 
 export function createAppWindow(): void {
   // Register custom protocol for resources
@@ -43,6 +60,43 @@ export function createAppWindow(): void {
       // 内嵌浏览器需要 <webview> 标签
       webviewTag: true,
     },
+  })
+
+  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    const match = /^about:blank#sourceId=([^&]+)$/.exec(params.src)
+    if (!match) return
+    let sourceId = ''
+    try {
+      sourceId = decodeURIComponent(match[1])
+    } catch {
+      event.preventDefault()
+      return
+    }
+    if (!/^src-[a-zA-Z0-9_-]{1,120}$/.test(sourceId)) {
+      event.preventDefault()
+      return
+    }
+    webPreferences.partition = hardenSourceRuntimeSession(sourceId)
+    webPreferences.preload = join(__dirname, '../preload/source-runtime.js')
+    webPreferences.nodeIntegration = false
+    webPreferences.nodeIntegrationInSubFrames = false
+    webPreferences.nodeIntegrationInWorker = false
+    webPreferences.contextIsolation = true
+    webPreferences.sandbox = true
+    webPreferences.webviewTag = false
+    webPreferences.webSecurity = true
+    webPreferences.allowRunningInsecureContent = false
+    webPreferences.additionalArguments = [
+      ...(webPreferences.additionalArguments ?? []).filter((argument) => !argument.startsWith('--openread-source-id=')),
+      `--openread-source-id=${encodeURIComponent(sourceId)}`,
+    ]
+  })
+  mainWindow.webContents.on('did-attach-webview', (_event, contents) => {
+    if (!/^about:blank#sourceId=/.test(contents.getURL())) return
+    contents.on('will-navigate', (event) => event.preventDefault())
+    contents.on('will-frame-navigate', (details) => details.preventDefault())
+    contents.on('will-redirect', (details) => details.preventDefault())
+    contents.setWindowOpenHandler(() => ({ action: 'deny' }))
   })
 
   // Register IPC events for the main window.

@@ -1,6 +1,6 @@
 {
   "name": "openread",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "OpenRead · 摸鱼阅读 — 网页浏览 + 本地电子书阅读 二合一桌面工具(开源)",
   "main": "./out/main/main.js",
   "license": "MIT",
@@ -25,7 +25,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/guasam/electron-react-app"
+    "url": "https://github.com/hxx927/openread.git"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -79,6 +79,7 @@
     "react-dom": "^19.2.4",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.65.0",
     "vite": "^7.3.1"
   }
 }

@@ -3,6 +3,7 @@ dist
 out
 .DS_Store
 *.log*
+*.tsbuildinfo
 temp
 
 # 本项目运行时数据(开发期写到项目同盘,避免占用 C 盘)

@@ -2,8 +2,6 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import PdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { ViewerHandle, ViewerProps } from './types'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 /** PDF 阅读器,基于 pdf.js;单页画布 + 翻页 + 适配宽度缩放 */
 const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewer(props, ref) {
   const { path, initialLocation, theme, onProgress, onMeta, onToc } = props
