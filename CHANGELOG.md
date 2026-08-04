@@ -6,7 +6,7 @@ All notable changes to OpenRead are listed here.
 
 ## v0.7.0
 
-- Add 轻悦时光-compatible search, discovery, book info, chapter, content, and login flows.
+- Add 轻悦时光-compatible search, discovery, book detail, chapter, content, and login flows.
 - Add complete source management: import, edit, enable/disable, move, debug, delete, and session reset.
 - Isolate each source's runtime, cookies, credentials, and cache; rotate identities when source code changes.
 - Harden source networking against SSRF and DNS rebinding with fixed public endpoints, bounded redirects, timeouts, quotas, and concurrency limits.

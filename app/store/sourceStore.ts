@@ -16,7 +16,14 @@ export interface Hit extends SourceBook {
   sourceName: string
 }
 
+type ReadableSourceChapter = SourceChapter & { isVolume?: false } & ({ chapterId: string } | { url: string })
+
+export function isReadableChapter(chapter: SourceChapter | undefined): chapter is ReadableSourceChapter {
+  return Boolean(chapter && !chapter.isVolume && (chapter.chapterId || chapter.url))
+}
+
 export type SourceMode = 'search' | 'discover'
+export type SourceBookStage = 'detail' | 'chapters'
 
 interface SourceState {
   sources: BookSource[]
@@ -37,6 +44,9 @@ interface SourceState {
   discoveryError: string
 
   book: Hit | null
+  bookStage: SourceBookStage
+  loadingBookDetail: boolean
+  bookDetailError: string
   chapters: SourceChapter[]
   loadingChapters: boolean
   chapterError: string
@@ -64,8 +74,11 @@ interface SourceState {
   changeDiscoveryPage: (delta: number) => Promise<void>
 
   openBook: (h: Hit) => Promise<void>
+  openCatalog: () => Promise<void>
+  startReading: () => Promise<void>
   openChapter: (index: number) => Promise<void>
   backToList: () => void
+  backToDetail: () => void
   closeBook: () => void
   dispose: () => void
 }
@@ -73,15 +86,34 @@ interface SourceState {
 const api = () => window.conveyor.source
 const message = (error: unknown) =>
   ((error as Error)?.message || String(error)).replace(/^.*Error(?: invoking remote method '[^']+')?:\s*/s, '')
+const missingInfoFunction = (error: unknown) => /书源未实现\s+info\(\)/.test(message(error))
 
 function hit(source: BookSource, book: SourceBook): Hit {
   return { ...book, sourceId: source.id, sourceName: source.name }
+}
+
+function mergeBookDetail(source: BookSource, book: Hit, detail: SourceBook): Hit {
+  return hit(source, {
+    ...book,
+    ...detail,
+    bookUrl: detail.bookUrl || book.bookUrl,
+    name: detail.name || book.name,
+    author: detail.author || book.author,
+    kind: detail.kind || book.kind,
+    coverUrl: detail.coverUrl || book.coverUrl,
+    intro: detail.intro || book.intro,
+    tocUrl: detail.tocUrl || book.tocUrl,
+    wordCount: detail.wordCount || book.wordCount,
+    latestChapterTitle: detail.latestChapterTitle || book.latestChapterTitle,
+    type: detail.type ?? book.type,
+  })
 }
 
 let sourceListGeneration = 0
 let searchGeneration = 0
 let discoveryGeneration = 0
 let bookGeneration = 0
+let catalogGeneration = 0
 let contentGeneration = 0
 
 type StoreSet = (partial: Partial<SourceState>) => void
@@ -111,9 +143,13 @@ function invalidateSource(sourceId: string, replacementId: string, set: StoreSet
   }
   if (current.book?.sourceId === sourceId) {
     bookGeneration++
+    catalogGeneration++
     contentGeneration++
     Object.assign(next, {
       book: null,
+      bookStage: 'detail',
+      loadingBookDetail: false,
+      bookDetailError: '',
       chapters: [],
       loadingChapters: false,
       chapterError: '',
@@ -164,6 +200,9 @@ export const useSourceStore = create<SourceState>((set, get) => ({
   discoveryError: '',
 
   book: null,
+  bookStage: 'detail',
+  loadingBookDetail: false,
+  bookDetailError: '',
   chapters: [],
   loadingChapters: false,
   chapterError: '',
@@ -297,6 +336,7 @@ export const useSourceStore = create<SourceState>((set, get) => ({
     searchGeneration++
     discoveryGeneration++
     bookGeneration++
+    catalogGeneration++
     contentGeneration++
     set({
       selectedSourceId: id,
@@ -311,6 +351,9 @@ export const useSourceStore = create<SourceState>((set, get) => ({
       discovering: false,
       discoveryError: '',
       book: null,
+      bookStage: 'detail',
+      loadingBookDetail: false,
+      bookDetailError: '',
       chapters: [],
       loadingChapters: false,
       chapterError: '',
@@ -333,6 +376,7 @@ export const useSourceStore = create<SourceState>((set, get) => ({
     if (!key || !enabled.length) return
     const generation = ++searchGeneration
     bookGeneration++
+    catalogGeneration++
     contentGeneration++
     set({
       searching: true,
@@ -340,6 +384,9 @@ export const useSourceStore = create<SourceState>((set, get) => ({
       hits: [],
       errors: [],
       book: null,
+      bookStage: 'detail',
+      loadingBookDetail: false,
+      bookDetailError: '',
       chapters: [],
       loadingChapters: false,
       chapterError: '',
@@ -425,39 +472,108 @@ export const useSourceStore = create<SourceState>((set, get) => ({
     const source = get().sources.find((item) => item.id === book.sourceId)
     if (!source) return
     const generation = ++bookGeneration
+    catalogGeneration++
     contentGeneration++
-    set({ book, chapters: [], loadingChapters: true, chapterError: '', content: '', chapterIndex: -1 })
+    set({
+      book,
+      bookStage: 'detail',
+      loadingBookDetail: true,
+      bookDetailError: '',
+      chapters: [],
+      loadingChapters: false,
+      chapterError: '',
+      content: '',
+      chapterIndex: -1,
+      loadingContent: false,
+    })
     try {
-      let tocUrl = book.tocUrl
-      if (!tocUrl) {
-        try {
-          const detail = await sourceEngine.info(source, book.bookUrl)
-          tocUrl = detail?.tocUrl || book.bookUrl
-        } catch {
-          tocUrl = book.bookUrl
-        }
-      }
-      const chapters = await sourceEngine.chapter(source, tocUrl!, book.bookUrl)
+      const detail = await sourceEngine.info(source, book.bookUrl)
       const current = get().book
-      if (generation !== bookGeneration || current?.sourceId !== book.sourceId || current?.bookUrl !== book.bookUrl)
-        return
-      set({
-        chapters: Array.isArray(chapters) ? chapters : [],
-        loadingChapters: false,
-        chapterError: Array.isArray(chapters) && chapters.length ? '' : '没有解析到章节',
-      })
+      if (generation !== bookGeneration || current?.sourceId !== book.sourceId) return
+      if (!detail || typeof detail !== 'object' || Array.isArray(detail)) throw new Error('书源没有返回有效详情')
+      set({ book: mergeBookDetail(source, book, detail), loadingBookDetail: false })
     } catch (error) {
       if (generation !== bookGeneration) return
+      set({
+        loadingBookDetail: false,
+        bookDetailError: missingInfoFunction(error) ? '' : `详情加载失败: ${message(error)}`,
+      })
+    }
+  },
+
+  openCatalog: async () => {
+    const { book, chapters } = get()
+    const source = book && get().sources.find((item) => item.id === book.sourceId)
+    if (!book || !source) return
+    contentGeneration++
+    if (chapters.length) {
+      set({
+        bookStage: 'chapters',
+        loadingChapters: false,
+        chapterError: '',
+        chapterIndex: -1,
+        content: '',
+        loadingContent: false,
+      })
+      return
+    }
+    const generation = ++catalogGeneration
+    const activeBookGeneration = bookGeneration
+    set({
+      bookStage: 'chapters',
+      loadingChapters: true,
+      chapterError: '',
+      chapterIndex: -1,
+      content: '',
+      loadingContent: false,
+    })
+    try {
+      const tocUrl = book.tocUrl || book.bookUrl
+      const nextChapters = await sourceEngine.chapter(source, tocUrl, book.bookUrl)
+      const current = get()
+      if (
+        generation !== catalogGeneration ||
+        activeBookGeneration !== bookGeneration ||
+        current.bookStage !== 'chapters' ||
+        current.book?.sourceId !== book.sourceId
+      )
+        return
+      const resolvedChapters = Array.isArray(nextChapters) ? nextChapters : []
+      set({
+        chapters: resolvedChapters,
+        loadingChapters: false,
+        chapterError: resolvedChapters.length ? '' : '没有解析到章节',
+      })
+    } catch (error) {
+      if (generation !== catalogGeneration) return
       set({ loadingChapters: false, chapterError: `目录加载失败: ${message(error)}` })
     }
+  },
+
+  startReading: async () => {
+    const book = get().book
+    if (!book) return
+    const activeBookGeneration = bookGeneration
+    await get().openCatalog()
+    const current = get()
+    if (
+      activeBookGeneration !== bookGeneration ||
+      current.book?.sourceId !== book.sourceId ||
+      current.chapterError ||
+      !current.chapters.length
+    )
+      return
+    const first = current.chapters.findIndex(isReadableChapter)
+    if (first >= 0) await get().openChapter(first)
   },
 
   openChapter: async (index) => {
     const { book, chapters } = get()
     const chapter = chapters[index]
     const source = book && get().sources.find((item) => item.id === book.sourceId)
-    if (!book || !chapter || !source) return
+    if (!book || !isReadableChapter(chapter) || !source) return
     const generation = ++contentGeneration
+    const activeBookGeneration = bookGeneration
     const chapterKey = String(chapter.chapterId || chapter.url || '')
     set({ chapterIndex: index, loadingContent: true, content: '' })
     try {
@@ -465,7 +581,12 @@ export const useSourceStore = create<SourceState>((set, get) => ({
       const current = get()
       const currentChapter = current.chapters[current.chapterIndex]
       const currentKey = String(currentChapter?.chapterId || currentChapter?.url || '')
-      if (generation !== contentGeneration || current.book?.bookUrl !== book.bookUrl || currentKey !== chapterKey)
+      if (
+        generation !== contentGeneration ||
+        activeBookGeneration !== bookGeneration ||
+        current.book?.sourceId !== book.sourceId ||
+        currentKey !== chapterKey
+      )
         return
       set({ content: typeof text === 'string' ? text : String(text ?? ''), loadingContent: false })
     } catch (error) {
@@ -478,11 +599,27 @@ export const useSourceStore = create<SourceState>((set, get) => ({
     contentGeneration++
     set({ chapterIndex: -1, content: '', loadingContent: false })
   },
+  backToDetail: () => {
+    catalogGeneration++
+    contentGeneration++
+    set({
+      bookStage: 'detail',
+      loadingChapters: false,
+      chapterError: '',
+      chapterIndex: -1,
+      content: '',
+      loadingContent: false,
+    })
+  },
   closeBook: () => {
     bookGeneration++
+    catalogGeneration++
     contentGeneration++
     set({
       book: null,
+      bookStage: 'detail',
+      loadingBookDetail: false,
+      bookDetailError: '',
       chapters: [],
       chapterError: '',
       loadingChapters: false,
@@ -496,10 +633,12 @@ export const useSourceStore = create<SourceState>((set, get) => ({
     searchGeneration++
     discoveryGeneration++
     bookGeneration++
+    catalogGeneration++
     contentGeneration++
     set({
       searching: false,
       discovering: false,
+      loadingBookDetail: false,
       loadingChapters: false,
       loadingContent: false,
     })

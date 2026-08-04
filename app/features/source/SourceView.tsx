@@ -20,17 +20,26 @@ import {
   Bug,
   X,
   LogOut,
+  BookOpen,
+  List,
+  RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/app/components/ui/switch'
-import { useSourceStore, type Hit } from '@/app/store/sourceStore'
+import { isReadableChapter, useSourceStore, type Hit } from '@/app/store/sourceStore'
 import { useReaderStore } from '@/app/store/readerStore'
 import { THEME_COLORS } from '@/app/features/reader/types'
-import { sourceEngine, subscribeSourceToasts, type SourceLoginField, type SourceFunctionName } from './engine'
+import {
+  sourceEngine,
+  subscribeSourceToasts,
+  type SourceChapter,
+  type SourceLoginField,
+  type SourceFunctionName,
+} from './engine'
 import type { BookSource } from '@/lib/conveyor/api/source-api'
 
 export default function SourceView() {
-  const { sources, loadSources, book, chapterIndex, mode, setMode, dispose } = useSourceStore()
+  const { sources, loadSources, book, bookStage, chapterIndex, mode, setMode, dispose } = useSourceStore()
   const [manage, setManage] = useState(false)
   const [loginSource, setLoginSource] = useState<BookSource | null>(null)
   const [loadError, setLoadError] = useState('')
@@ -81,7 +90,11 @@ export default function SourceView() {
       {chapterIndex >= 0 ? (
         <ChapterReader />
       ) : book ? (
-        <ChapterList />
+        bookStage === 'chapters' ? (
+          <ChapterList />
+        ) : (
+          <BookDetail />
+        )
       ) : (
         <>
           <div className="flex items-center gap-1 border-b border-border px-5 py-2">
@@ -414,8 +427,22 @@ function BookResults({ books, onOpen, grid = false }: { books: Hit[]; onOpen: (b
   )
 }
 
-function SourceCover({ sourceId, url, title }: { sourceId: string; url?: string; title: string }) {
+function SourceCover({
+  sourceId,
+  url,
+  title,
+  size = 'list',
+}: {
+  sourceId: string
+  url?: string
+  title: string
+  size?: 'list' | 'detail'
+}) {
   const [src, setSrc] = useState('')
+  const coverClass =
+    size === 'detail'
+      ? 'h-48 w-[8.5rem] shrink-0 rounded-xl object-cover shadow-md sm:h-56 sm:w-40'
+      : 'h-20 w-14 shrink-0 rounded object-cover'
 
   useEffect(() => {
     let active = true
@@ -444,26 +471,229 @@ function SourceCover({ sourceId, url, title }: { sourceId: string; url?: string;
   }, [sourceId, url])
 
   return src ? (
-    <img src={src} alt={`${title} 封面`} className="h-20 w-14 shrink-0 rounded object-cover" />
+    <img src={src} alt={`${title} 封面`} className={coverClass} />
   ) : (
-    <div className="flex h-20 w-14 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
-      <Library className="size-4" />
+    <div
+      className={cn(
+        'flex shrink-0 items-center justify-center bg-muted text-muted-foreground',
+        coverClass.replace('object-cover', '')
+      )}
+    >
+      <Library className={size === 'detail' ? 'size-8' : 'size-4'} />
     </div>
   )
 }
 
-/* ---------------- 目录 / 正文 ---------------- */
+/* ---------------- 详情 / 目录 / 正文 ---------------- */
 
-function ChapterList() {
-  const { book, chapters, loadingChapters, chapterError, openChapter, closeBook } = useSourceStore()
+function detailTags(kind?: string): string[] {
+  if (!kind) return []
+  return kind
+    .split(/[,，、|/·]+/)
+    .map((tag) => tag.trim())
+    .filter((tag, index, tags) => Boolean(tag) && tags.indexOf(tag) === index)
+    .slice(0, 8)
+}
+
+function normalizeDetailText(value: string): string {
+  return value
+    .split(String.fromCharCode(160))
+    .join(' ')
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.replace(/[\t ]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function detailText(value?: string): string {
+  const raw = (value || '').trim()
+  if (!raw) return ''
+  const htmlProtocol = /^@html:/i.test(raw)
+  let html = raw.replace(/^@html:\s*/i, '')
+  const parser = new DOMParser()
+
+  if (!/<[a-z][\s\S]*?>/i.test(html) && /&lt;[a-z][\s\S]*?&gt;/i.test(html)) {
+    html = parser.parseFromString(html, 'text/html').body.textContent || html
+  }
+
+  const document = parser.parseFromString(html, 'text/html')
+  document.querySelectorAll('script,style,noscript,template,iframe,object,svg,canvas').forEach((node) => node.remove())
+  document.querySelectorAll('br').forEach((node) => node.replaceWith(document.createTextNode('\n')))
+  document.querySelectorAll('li').forEach((node) => node.prepend(document.createTextNode('• ')))
+  document
+    .querySelectorAll(
+      'address,article,aside,blockquote,div,dl,dt,dd,figcaption,figure,footer,h1,h2,h3,h4,h5,h6,header,hr,li,main,nav,ol,p,pre,section,tr,ul'
+    )
+    .forEach((node) => node.append(document.createTextNode('\n')))
+
+  let text = document.body.textContent || ''
+  if (htmlProtocol && /&(?:#\d+|#x[\da-f]+|[a-z]+);/i.test(text)) {
+    text = parser.parseFromString(text, 'text/html').body.textContent || text
+  }
+  return normalizeDetailText(text)
+}
+
+function DetailMeta({ label, value }: { label: string; value?: string }) {
+  if (!value) return null
+  return (
+    <div className="min-w-0 rounded-lg border border-border/70 bg-background/70 px-3 py-2.5">
+      <p className="text-[10px] tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate text-xs font-medium" title={value}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function BookDetail() {
+  const { book, loadingBookDetail, bookDetailError, openBook, openCatalog, startReading, closeBook } = useSourceStore()
+  if (!book) return null
+  const tags = detailTags(book.kind)
+  const intro = detailText(book.intro)
+  const waitingForCatalog = loadingBookDetail && !book.tocUrl
+
   return (
     <>
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <button onClick={closeBook} className="rounded p-1.5 hover:bg-muted" title="返回">
+        <button onClick={closeBook} className="rounded p-1.5 hover:bg-muted" title="返回搜索结果">
+          <ArrowLeft className="size-4" />
+        </button>
+        <span className="flex-1 truncate text-xs font-medium">书籍详情</span>
+        <span className="max-w-52 truncate rounded-full bg-muted px-2.5 py-1 text-[10px] text-muted-foreground">
+          {book.sourceName}
+        </span>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div className="mx-auto w-full max-w-5xl p-4 sm:p-7">
+          <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+            <div className="bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-5 sm:p-7">
+              <div className="flex flex-col gap-5 sm:flex-row sm:gap-7">
+                <div className="self-center sm:self-start">
+                  <SourceCover sourceId={book.sourceId} url={book.coverUrl} title={book.name} size="detail" />
+                </div>
+                <div className="min-w-0 flex-1 text-center sm:text-left">
+                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{book.name}</h1>
+                  <p className="mt-2 text-sm text-muted-foreground">{book.author || '未知作者'}</p>
+
+                  <div className="mt-4 flex flex-wrap justify-center gap-1.5 sm:justify-start">
+                    {tags.length ? (
+                      tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] text-primary"
+                        >
+                          {tag}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
+                        暂无分类
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-1 gap-2 text-left sm:grid-cols-2">
+                    <DetailMeta label="作者" value={book.author || '未知作者'} />
+                    <DetailMeta label="来源书源" value={book.sourceName} />
+                    <DetailMeta label="字数" value={book.wordCount} />
+                    <DetailMeta label="最新章节" value={book.latestChapterTitle} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {loadingBookDetail && (
+              <div
+                role="status"
+                className="flex items-center gap-2 border-t border-border bg-muted/30 px-5 py-3 text-xs text-muted-foreground"
+              >
+                <Loader2 className="size-3.5 animate-spin" /> 正在向书源加载完整详情…
+              </div>
+            )}
+
+            {bookDetailError && (
+              <div className="flex flex-wrap items-center gap-3 border-t border-destructive/20 bg-destructive/5 px-5 py-3 text-xs text-destructive">
+                <AlertTriangle className="size-3.5 shrink-0" />
+                <span className="min-w-0 flex-1">{bookDetailError}</span>
+                <button
+                  onClick={() => openBook(book)}
+                  className="flex items-center gap-1 rounded-md border border-destructive/30 px-2.5 py-1 hover:bg-destructive/10"
+                >
+                  <RefreshCw className="size-3" /> 重试
+                </button>
+              </div>
+            )}
+
+            <div className="border-t border-border p-5 sm:p-7">
+              <div className="flex items-center gap-2">
+                <BookOpen className="size-4 text-primary" />
+                <h2 className="text-sm font-semibold">内容简介</h2>
+              </div>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+                {intro || '书源暂未提供内容简介。'}
+              </p>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div className="border-t border-border bg-background/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-end gap-2">
+          <button
+            onClick={closeBook}
+            className="rounded-md border border-border px-4 py-2 text-xs text-muted-foreground hover:bg-muted"
+          >
+            返回结果
+          </button>
+          <button
+            onClick={openCatalog}
+            disabled={waitingForCatalog}
+            className="flex items-center gap-1.5 rounded-md border border-primary/30 px-4 py-2 text-xs font-medium text-primary hover:bg-primary/5 disabled:opacity-40"
+          >
+            <List className="size-3.5" /> 查看目录
+          </button>
+          <button
+            onClick={startReading}
+            disabled={waitingForCatalog}
+            className="flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+          >
+            <BookOpen className="size-3.5" /> 开始阅读
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function adjacentReadableChapterIndex(chapters: SourceChapter[], chapterIndex: number, direction: -1 | 1): number {
+  for (let index = chapterIndex + direction; index >= 0 && index < chapters.length; index += direction) {
+    if (isReadableChapter(chapters[index])) return index
+  }
+  return -1
+}
+
+function ChapterList() {
+  const { book, chapters, loadingChapters, chapterError, openCatalog, openChapter, backToDetail } = useSourceStore()
+  const readableCount = chapters.filter(isReadableChapter).length
+  return (
+    <>
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <button onClick={backToDetail} className="rounded p-1.5 hover:bg-muted" title="返回详情">
           <ArrowLeft className="size-4" />
         </button>
         <span className="flex-1 truncate text-xs font-medium">{book?.name}</span>
-        <span className="text-[11px] text-muted-foreground">{chapters.length} 章</span>
+        {chapterError && (
+          <button
+            onClick={openCatalog}
+            className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted"
+          >
+            <RefreshCw className="size-3" /> 重试
+          </button>
+        )}
+        <span className="text-[11px] text-muted-foreground">{readableCount} 章</span>
       </div>
       <div className="flex-1 overflow-auto p-3">
         {loadingChapters ? (
@@ -474,18 +704,27 @@ function ChapterList() {
           <Empty icon={<AlertTriangle className="size-10 opacity-30" />} title="目录加载失败" desc={chapterError} />
         ) : (
           <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-            {chapters.map((chapter, index) => (
-              <button
-                key={index}
-                onClick={() => openChapter(index)}
-                className={cn(
-                  'truncate rounded px-2 py-1.5 text-left text-xs hover:bg-muted',
-                  chapter.isVolume && 'font-semibold'
-                )}
-              >
-                {chapter.name}
-              </button>
-            ))}
+            {chapters.map((chapter, index) =>
+              isReadableChapter(chapter) ? (
+                <button
+                  key={index}
+                  onClick={() => openChapter(index)}
+                  className="truncate rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+                >
+                  {chapter.name}
+                </button>
+              ) : (
+                <div
+                  key={index}
+                  className={cn(
+                    'truncate px-2 py-1.5 text-xs text-muted-foreground',
+                    chapter.isVolume && 'col-span-full mt-1 border-b border-border font-semibold text-foreground'
+                  )}
+                >
+                  {chapter.name}
+                </div>
+              )
+            )}
           </div>
         )}
       </div>
@@ -498,6 +737,8 @@ function ChapterReader() {
   const { settings } = useReaderStore()
   const { bg, fg } = THEME_COLORS[settings.theme]
   const chapter = chapters[chapterIndex]
+  const previousIndex = adjacentReadableChapterIndex(chapters, chapterIndex, -1)
+  const nextIndex = adjacentReadableChapterIndex(chapters, chapterIndex, 1)
   return (
     <>
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
@@ -506,15 +747,15 @@ function ChapterReader() {
         </button>
         <span className="flex-1 truncate text-xs font-medium">{chapter?.name}</span>
         <button
-          onClick={() => openChapter(chapterIndex - 1)}
-          disabled={chapterIndex <= 0}
+          onClick={() => openChapter(previousIndex)}
+          disabled={previousIndex < 0}
           className="rounded p-1.5 hover:bg-muted disabled:opacity-30"
         >
           <ChevronLeft className="size-4" />
         </button>
         <button
-          onClick={() => openChapter(chapterIndex + 1)}
-          disabled={chapterIndex >= chapters.length - 1}
+          onClick={() => openChapter(nextIndex)}
+          disabled={nextIndex < 0}
           className="rounded p-1.5 hover:bg-muted disabled:opacity-30"
         >
           <ChevronRight className="size-4" />
