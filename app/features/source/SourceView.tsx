@@ -187,7 +187,8 @@ function SourceSelector({ allowAll = true }: { allowAll?: boolean }) {
 }
 
 function SearchPane() {
-  const { sources, selectedSourceId, query, setQuery, search, searching, hits, errors, openBook } = useSourceStore()
+  const { sources, selectedSourceId, query, setQuery, search, searching, searchCompleted, hits, errors, openBook } =
+    useSourceStore()
   const count = sources.filter(
     (source) => source.enabled && (!selectedSourceId || source.id === selectedSourceId)
   ).length
@@ -208,28 +209,53 @@ function SearchPane() {
         <button
           onClick={search}
           disabled={searching || !count || !query.trim()}
-          className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+          className="flex min-w-16 items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
         >
-          {searching ? <Loader2 className="size-4 animate-spin" /> : '搜索'}
+          {searching ? (
+            <>
+              <Loader2 className="size-3.5 animate-spin" />
+              搜索中
+            </>
+          ) : (
+            '搜索'
+          )}
         </button>
       </div>
       <div className="flex-1 overflow-auto p-4">
+        <ErrorBox title={hits.length ? '部分书源出错' : '搜索失败'} errors={errors} />
         {!count ? (
           <Empty
             icon={<FileCode2 className="size-10 opacity-30" />}
             title="还没有可用书源"
             desc="请到书源管理导入并启用书源"
           />
-        ) : hits.length === 0 && !searching ? (
+        ) : searching ? (
+          <Empty
+            icon={<Loader2 className="size-10 animate-spin opacity-30" />}
+            title="正在搜索"
+            desc="正在等待书源返回结果…"
+          />
+        ) : hits.length ? (
+          <BookResults books={hits} onOpen={openBook} />
+        ) : searchCompleted && errors.length ? (
+          <Empty
+            icon={<AlertTriangle className="size-10 opacity-30" />}
+            title="搜索失败"
+            desc="请查看上方错误信息，修复后重试"
+          />
+        ) : searchCompleted ? (
+          <Empty
+            icon={<Search className="size-10 opacity-30" />}
+            title="没有找到结果"
+            desc={`没有找到与“${query.trim()}”匹配的书籍`}
+          />
+        ) : (
           <Empty
             icon={<Search className="size-10 opacity-30" />}
             title="输入书名开始搜索"
             desc="可搜索全部书源，也可指定单个书源"
           />
-        ) : (
-          <BookResults books={hits} onOpen={openBook} />
         )}
-        <ErrorBox title="部分书源出错" errors={errors} />
       </div>
     </>
   )

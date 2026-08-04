@@ -1,4 +1,4 @@
-import { app, session } from 'electron'
+import { app, session, type Session } from 'electron'
 import { createHash, randomUUID } from 'crypto'
 import { open, rename } from 'fs/promises'
 import { request as httpNodeRequest } from 'http'
@@ -288,7 +288,10 @@ export const sources = {
 const MAX_REQUEST_BODY_BYTES = 8 * 1024 * 1024
 const MAX_RESPONSE_BODY_BYTES = 32 * 1024 * 1024
 const MAX_HEADER_BYTES = 64 * 1024
+const MAX_DOH_RESPONSE_BYTES = 64 * 1024
 const REQUEST_TIMEOUT_MS = 30_000
+const DNS_VERIFIER_PARTITION = 'openread-dns-verifier'
+const DOH_ENDPOINTS = ['https://dns.google/resolve', 'https://cloudflare-dns.com/dns-query']
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
@@ -331,6 +334,11 @@ interface NodeHttpResult {
   headers: Record<string, string>
   setCookies: string[]
   bytes: Buffer
+}
+
+interface ResolvedAddress {
+  address: string
+  family: number
 }
 
 function abortReason(signal: AbortSignal): Error {
@@ -435,6 +443,125 @@ function privateAddress(address: string): boolean {
   return false
 }
 
+function proxyFakeAddress(address: string): boolean {
+  const normalized = address.toLowerCase().split('%')[0]
+  if (isIP(normalized) !== 4) return false
+  const [a, b] = normalized.split('.').map(Number)
+  return a === 198 && (b === 18 || b === 19)
+}
+
+function hasProxyRoute(value: string): boolean {
+  return value
+    .split(';')
+    .map((rule) => rule.trim())
+    .some((rule) => /^(?:proxy|https|socks4?|socks5|quic)\s+\S+/i.test(rule))
+}
+
+async function limitedFetchBytes(response: Response, signal: AbortSignal): Promise<Buffer> {
+  const declaredLength = Number(response.headers.get('content-length'))
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_DOH_RESPONSE_BYTES) {
+    throw new Error('公网 DNS 响应过大')
+  }
+  const reader = response.body?.getReader()
+  if (!reader) return Buffer.alloc(0)
+  const chunks: Buffer[] = []
+  let size = 0
+  try {
+    while (true) {
+      signal.throwIfAborted()
+      const { done, value } = await abortable(reader.read(), signal)
+      if (done) break
+      if (!value) continue
+      size += value.byteLength
+      if (size > MAX_DOH_RESPONSE_BYTES) throw new Error('公网 DNS 响应过大')
+      chunks.push(Buffer.from(value))
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => {})
+    throw error
+  }
+  return Buffer.concat(chunks)
+}
+
+function parseDohAddresses(value: unknown): ResolvedAddress[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+  const response = value as { Status?: unknown; Answer?: unknown }
+  if (response.Status !== 0 || !Array.isArray(response.Answer)) return []
+  const addresses: ResolvedAddress[] = []
+  for (const answer of response.Answer) {
+    if (!answer || typeof answer !== 'object' || Array.isArray(answer)) continue
+    const record = answer as { type?: unknown; data?: unknown }
+    if (![1, 28].includes(Number(record.type)) || typeof record.data !== 'string') continue
+    const family = isIP(record.data)
+    if ((Number(record.type) === 1 && family === 4) || (Number(record.type) === 28 && family === 6)) {
+      addresses.push({ address: record.data, family })
+    }
+  }
+  return addresses
+}
+
+async function queryDoh(
+  sourceSession: Session,
+  endpoint: string,
+  hostname: string,
+  type: 'A' | 'AAAA',
+  signal: AbortSignal
+): Promise<ResolvedAddress[]> {
+  const url = new URL(endpoint)
+  url.searchParams.set('name', hostname)
+  url.searchParams.set('type', type)
+  const response = await abortable(
+    sourceSession.fetch(url.href, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/dns-json',
+        'User-Agent': 'OpenRead/0.7.0 DNS verifier',
+      },
+      redirect: 'error',
+      cache: 'no-store',
+      credentials: 'omit',
+      signal,
+      bypassCustomProtocolHandlers: true,
+    }),
+    signal
+  )
+  if (!response.ok) throw new Error(`公网 DNS 请求失败(HTTP ${response.status})`)
+  let value: unknown
+  try {
+    value = JSON.parse((await limitedFetchBytes(response, signal)).toString('utf8'))
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new Error('公网 DNS 返回了无效数据')
+    throw error
+  }
+  return parseDohAddresses(value)
+}
+
+async function resolveProxyFakeHost(hostname: string, signal: AbortSignal): Promise<ResolvedAddress[]> {
+  // 不复用书源 Session，避免登录窗口的全量 webRequest 守卫递归拦截 DoH 核验请求。
+  const verifierSession = session.fromPartition(DNS_VERIFIER_PARTITION)
+  let lastError: unknown
+  for (const endpoint of DOH_ENDPOINTS) {
+    try {
+      const [ipv4, ipv6] = await Promise.all([
+        queryDoh(verifierSession, endpoint, hostname, 'A', signal),
+        queryDoh(verifierSession, endpoint, hostname, 'AAAA', signal),
+      ])
+      const addresses = [...ipv4, ...ipv6]
+      if (!addresses.length) continue
+      if (addresses.some(({ address, family }) => family === 0 || privateAddress(address))) {
+        throw new Error('书源域名的公网 DNS 结果包含本机或私有地址')
+      }
+      return addresses
+    } catch (error) {
+      signal.throwIfAborted()
+      if ((error as Error).message.includes('包含本机或私有地址')) throw error
+      lastError = error
+    }
+  }
+  const detail = lastError instanceof Error ? `: ${lastError.message}` : ''
+  throw new Error(`书源域名解析为代理 fake-IP，无法验证真实公网地址${detail}`)
+}
+
 async function publicHttpTarget(value: string, partition: string, signal?: AbortSignal): Promise<PublicHttpTarget> {
   if (value.length > 8_192) throw new Error('书源请求地址过长')
   const target = new URL(value)
@@ -444,12 +571,19 @@ async function publicHttpTarget(value: string, partition: string, signal?: Abort
     throw new Error('书源请求不允许访问本机或私有网络')
   }
 
+  const sourceSession = session.fromPartition(partition)
+  const activeSignal = signal ?? new AbortController().signal
   const literalFamily = isIP(hostname)
-  const addresses = literalFamily
+  let addresses = literalFamily
     ? [{ address: hostname, family: literalFamily }]
-    : (
-        await abortable(session.fromPartition(partition).resolveHost(hostname, { cacheUsage: 'disallowed' }), signal)
-      ).endpoints.map(({ address }) => ({ address, family: isIP(address) }))
+    : (await abortable(sourceSession.resolveHost(hostname, { cacheUsage: 'disallowed' }), activeSignal)).endpoints.map(
+        ({ address }) => ({ address, family: isIP(address) })
+      )
+
+  if (!literalFamily && addresses.length && addresses.every(({ address }) => proxyFakeAddress(address))) {
+    const proxy = await abortable(sourceSession.resolveProxy(target.href), activeSignal)
+    if (hasProxyRoute(proxy)) addresses = await resolveProxyFakeHost(hostname, activeSignal)
+  }
   if (!addresses.length || addresses.some(({ address, family }) => family === 0 || privateAddress(address))) {
     throw new Error('书源请求不允许访问本机或私有网络')
   }

@@ -25,6 +25,7 @@ interface SourceState {
 
   query: string
   searching: boolean
+  searchCompleted: boolean
   hits: Hit[]
   errors: string[]
 
@@ -90,6 +91,7 @@ function invalidateSource(sourceId: string, replacementId: string, set: StoreSet
   const current = get()
   const next: Partial<SourceState> = {
     searching: false,
+    searchCompleted: false,
     hits: [],
     errors: [],
   }
@@ -150,6 +152,7 @@ export const useSourceStore = create<SourceState>((set, get) => ({
 
   query: '',
   searching: false,
+  searchCompleted: false,
   hits: [],
   errors: [],
 
@@ -279,7 +282,14 @@ export const useSourceStore = create<SourceState>((set, get) => ({
     if (mode === get().mode) return
     searchGeneration++
     discoveryGeneration++
-    set({ mode, errors: [], searching: false, discoveryError: '', discovering: false })
+    set({
+      mode,
+      errors: [],
+      searching: false,
+      searchCompleted: false,
+      discoveryError: '',
+      discovering: false,
+    })
   },
 
   selectSource: (id) => {
@@ -293,6 +303,7 @@ export const useSourceStore = create<SourceState>((set, get) => ({
       hits: [],
       errors: [],
       searching: false,
+      searchCompleted: false,
       findItems: [],
       selectedFind: null,
       discoveryHits: [],
@@ -312,7 +323,7 @@ export const useSourceStore = create<SourceState>((set, get) => ({
   setQuery: (q) => {
     if (q === get().query) return
     searchGeneration++
-    set({ query: q, searching: false, hits: [], errors: [] })
+    set({ query: q, searching: false, searchCompleted: false, hits: [], errors: [] })
   },
 
   search: async () => {
@@ -325,6 +336,7 @@ export const useSourceStore = create<SourceState>((set, get) => ({
     contentGeneration++
     set({
       searching: true,
+      searchCompleted: false,
       hits: [],
       errors: [],
       book: null,
@@ -350,7 +362,7 @@ export const useSourceStore = create<SourceState>((set, get) => ({
       if (result.status === 'fulfilled') hits.push(...result.value)
       else errors.push(`${enabled[index].name}: ${message(result.reason)}`)
     })
-    set({ hits, errors, searching: false })
+    set({ hits, errors, searching: false, searchCompleted: true })
   },
 
   loadFinds: async (sourceId) => {
